@@ -28,6 +28,6 @@ bot.run("0.0.0.0", 80, debug=True)
 
 ## Links
 
-- Libray Docs (Coming Soon)
+- Library Docs (Coming Soon)
 - Discord Server (Coming Soon)
 - [Interaction Docs](https://discord.com/developers/docs/interactions/application-commands)
