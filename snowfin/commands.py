@@ -40,14 +40,14 @@ class InteractionHandler:
                 if component_type not in (ComponentType.BUTTON, ComponentType.SELECT, None):
                     raise ValueError('component type must be BUTTON or SELECT')
 
-                cls._generic_callbacks[type][kwargs.get('component_type', None)] = func
+                cls._generic_callbacks[type][component_type] = func
             elif type is RequestType.APPLICATION_COMMAND:
-                command_type = kwargs.get('type', None)
+                command_type = kwargs.get('command_type', None)
 
                 if command_type not in (CommandType.CHAT_INPUT, CommandType.USER, CommandType.MESSAGE, None):
                     raise ValueError('command type must be CHAT_INPUT, USER, or MESSAGE')
 
-                cls._generic_callbacks[type][kwargs.get('type', None)] = func
+                cls._generic_callbacks[type][command_type] = func
             else:
                 cls._generic_callbacks[type] = func
 

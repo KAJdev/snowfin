@@ -2,7 +2,6 @@ import asyncio
 from typing import Coroutine
 
 from sanic import Sanic, Request
-from sanic.config import DEFAULT_CONFIG
 from sanic.response import HTTPResponse, json
 from sanic.log import logger
 
@@ -13,7 +12,7 @@ from dacite import from_dict, config
 
 import snowfin.interaction
 from .commands import InteractionHandler
-from .response import _DiscordResponse, DeferredResponse, EditResponse, MessageResponse
+from .response import _DiscordResponse, DeferredResponse
 from .http import *
 from .enums import *
 
@@ -33,12 +32,12 @@ def mix_into_commands(func: Coroutine, type: RequestType, name: str = None, **kw
     InteractionHandler.register(wrapper, type, name, **kwargs)
     return wrapper
 
-def SlashCommand(name: str = None) -> Coroutine:
+def SlashCommand(name: str = None, type: CommandType = None) -> Coroutine:
     def decorator(func):
-        return mix_into_commands(func, RequestType.APPLICATION_COMMAND, name)
+        return mix_into_commands(func, RequestType.APPLICATION_COMMAND, name, command_type=type)
     return decorator
 
-def MessageComponent(custom_id: str = None, type: snowfin.interaction.ComponentType = None) -> Coroutine:
+def MessageComponent(custom_id: str = None, type: ComponentType = None) -> Coroutine:
     def decorator(func):
         return mix_into_commands(func, RequestType.MESSAGE_COMPONENT, custom_id, component_type=type)
     return decorator
