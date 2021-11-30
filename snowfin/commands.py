@@ -31,7 +31,7 @@ class InteractionHandler:
             if type is RequestType.MESSAGE_COMPONENT:
                 component_type = kwargs.get('component_type', None)
 
-                if component_type is ComponentType.ACTION_ROW:
+                if component_type not in (ComponentType.BUTTON, ComponentType.SELECT):
                     raise ValueError('component type must be BUTTON or SELECT')
 
                 cls._generic_callbacks[type][kwargs.get('component_type', None)] = func
