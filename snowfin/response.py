@@ -1,6 +1,7 @@
 from dataclasses import asdict
-from typing import Coroutine, List, Union
+from typing import Callable, Coroutine, List, Union, Iterable
 from abc import ABC, abstractmethod
+import asyncio
 
 from .embed import Embed
 from .interaction import Choice
@@ -52,7 +53,7 @@ class AutocompleteResponse(_DiscordResponse):
 class DeferredResponse(_DiscordResponse):
     def __init__(
         self,
-        coro: Coroutine = None,
+        task: Union[asyncio.Task, Callable] = None,
         ephemperal: bool = False,
         **kwargs
     ) -> None:
@@ -60,7 +61,7 @@ class DeferredResponse(_DiscordResponse):
         if ephemperal:
             kwargs['flags'] = 64
 
-        self.coro = coro
+        self.task = task
 
         super().__init__(ResponseType.DEFER, **kwargs)
 
