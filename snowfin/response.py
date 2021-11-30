@@ -1,11 +1,11 @@
 from dataclasses import asdict
-from typing import List, Union
+from typing import Coroutine, List, Union
 from abc import ABC, abstractmethod
 
 from .embed import Embed
 from .interaction import Choice
 from .enums import ResponseType
-from .components import Components, Button, Select
+from .components import Components, Button, Select, TextInput
 
 MISSING = object()
 
@@ -13,7 +13,8 @@ __all__ = (
     'AutocompleteResponse',
     'MessageResponse',
     'DeferredResponse',
-    'EditResponse'
+    'EditResponse',
+    'ModalResponse',
 )
 
 class _DiscordResponse(ABC):
@@ -51,6 +52,7 @@ class AutocompleteResponse(_DiscordResponse):
 class DeferredResponse(_DiscordResponse):
     def __init__(
         self,
+        coro: Coroutine = None,
         ephemperal: bool = False,
         **kwargs
     ) -> None:
@@ -58,7 +60,12 @@ class DeferredResponse(_DiscordResponse):
         if ephemperal:
             kwargs['flags'] = 64
 
+        self.coro = coro
+
         super().__init__(ResponseType.DEFER, **kwargs)
+
+    def to_dict(self):
+        return super().to_dict()
 
 class MessageResponse(_DiscordResponse):
     def __init__(
@@ -78,9 +85,31 @@ class MessageResponse(_DiscordResponse):
         self.ephemeral = ephemeral
 
     def add_component(self, component: Union[Button, Select], row: int = None):
+        if isinstance(component, TextInput):
+            raise ValueError("TextInput cannot be added to a message")
+
         if self.components is MISSING:
             self.components = Components()
         self.components.add_component(component, row)
+
+        return self
+
+    def remove_component(self, component: Union[Button, Select, str]):
+        if self.components is MISSING:
+            self.components = Components()
+        self.components.remove_component(component)
+
+        return self
+
+    def add_embed(self, embed: Embed):
+        if self.embeds is MISSING:
+            self.embeds = []
+
+        if len(self.embeds) >= 10:
+            raise ValueError("Cannot add more than 10 embeds to a message")
+        self.embeds.append(embed)
+
+        return self
 
     def to_dict(self):
         if self.type is ResponseType.PONG:
@@ -118,3 +147,44 @@ class EditResponse(MessageResponse):
         if 'ephemeral' in kwargs:
             del kwargs['ephemeral']
         super().__init__(**kwargs)
+
+    def to_dict(self):
+        return super().to_dict()
+
+class ModalResponse(_DiscordResponse):
+    def __init__(
+        self,
+        custom_id: str,
+        title: str,
+        *components
+    ) -> None:
+        self.custom_id = custom_id
+        self.title = title
+        self.components = Components(*components)
+
+    def add_component(self, component: TextInput, row: int = None):
+        if not isinstance(component, TextInput):
+            raise ValueError("Modals only support TextInput components")
+
+        if self.components is MISSING:
+            self.components = Components()
+        self.components.add_component(component, row)
+
+        return self
+
+    def remove_component(self, component: Union[TextInput, str], row: int = None):
+        if self.components is MISSING:
+            self.components = Components()
+        self.components.remove_component(component)
+
+        return self
+
+    def to_dict(self):
+        return {
+            "type": self.type.value,
+            "data": {
+                "custom_id": self.custom_id,
+                "title": self.title,
+                "components": self.components.to_dict()
+            }
+        }

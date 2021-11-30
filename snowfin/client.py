@@ -1,6 +1,8 @@
+import asyncio
 from typing import Coroutine
 
 from sanic import Sanic, Request
+from sanic.config import DEFAULT_CONFIG
 from sanic.response import HTTPResponse, json
 from sanic.log import logger
 
@@ -11,13 +13,15 @@ from dacite import from_dict, config
 
 import snowfin.interaction
 from .commands import InteractionHandler
-from .response import _DiscordResponse
+from .response import _DiscordResponse, DeferredResponse, EditResponse, MessageResponse
+from .http import *
 from .enums import *
 
 __all__ = (
     'SlashCommand',
     'MessageComponent',
     'Autocomplete',
+    'Modal',
     'Client'
 )
 
@@ -44,15 +48,22 @@ def Autocomplete(name: str = None) -> Coroutine:
         return mix_into_commands(func, RequestType.APPLICATION_COMMAND_AUTOCOMPLETE, name)
     return decorator
 
+def Modal(custom_id: str = None) -> Coroutine:
+    def decorator(func):
+        return mix_into_commands(func, RequestType.MODAL_SUBMIT, custom_id)
+    return decorator
+
 
 class Client:
 
-    def __init__(self, verify_key: str, app: Sanic = None):
+    def __init__(self, verify_key: str, app: Sanic = None, **kwargs):
         if app is None:
             self.app = Sanic("snowfin-interactions")
         else:
             self.app = app
         self.verify_key = VerifyKey(bytes.fromhex(verify_key))
+
+        self.http: HTTP = HTTP(**dict((x, kwargs.get(x, None)) for x in ('proxy', 'proxy_auth', 'headers')))
 
         @self.app.on_request
         async def verify_signature(request: Request):
@@ -91,6 +102,22 @@ class Client:
         async def handle_request(request: Request):
             return await self.handle_request(request)
 
+    def handle_deferred_routine(self, routine: Coroutine, request):
+        async def wrapper():
+            try:
+                response = await routine(request)
+                await self.handle_deferred_response(request, response)
+            except Exception as e:
+                logger.error(e.__repr__())
+        task = asyncio.get_event_loop().create_task(wrapper())
+
+    async def handle_deferred_response(self, request, response):
+        if response:
+            if response.type in (ResponseType.SEND_MESSAGE, ResponseType.EDIT_ORIGINAL_MESSAGE):
+                await self.http.edit_original_message(request, response)
+            else:
+                raise Exception("Invalid response type")
+
     async def handle_request(self, request: Request) -> HTTPResponse:
         func = InteractionHandler.get_func(request.ctx.data, request.ctx.type)
         if func:
@@ -98,8 +125,20 @@ class Client:
         else:
             return json({"error": "command not found"}, status=404)
 
+        request.ctx.responded = True
+
         if isinstance(resp, _DiscordResponse):
-            return json(resp.to_dict())
+            d = resp.to_dict()
+            print(d)
+
+            if isinstance(resp, DeferredResponse):
+                if request.ctx.type == RequestType.MESSAGE_COMPONENT:
+                    resp.type = ResponseType.COMPONENT_DEFER
+                else:
+                    resp.type = ResponseType.DEFER
+
+                self.handle_deferred_routine(resp.coro, request)
+            return json(d)
         elif isinstance(resp, HTTPResponse):
             return resp
         else:

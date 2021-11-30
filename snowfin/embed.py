@@ -40,6 +40,8 @@ class EmbedAuthor:
         if self.url is not Empty:
             d['url'] = self.url
 
+        return d
+
 @dataclass
 class EmbedFooter:
     text: str
@@ -51,6 +53,8 @@ class EmbedFooter:
         }
         if self.icon_url is not Empty:
             d['icon_url'] = self.icon_url
+
+        return d
 
 @dataclass
 class Embed:
@@ -67,22 +71,25 @@ class Embed:
 
     def to_dict(self):
         d = {}
+
         for k, v in self.__dict__.items():
-            if v is Empty:
-                continue
-            elif k == 'timestamp':
-                if isinstance(v, datetime):
-                    v = v.timestamp()
-                else:
+            if v is not Empty:
+                if k == 'timestamp':
+                    if isinstance(v, datetime):
+                        v = int(v.timestamp())
+                    else:
+                        v = int(v)
+                elif k == 'fields':
+                    v = [x.to_dict() for x in v]
+                elif k == 'color':
                     v = int(v)
-            elif k == 'fields':
-                v = [x.to_dict() for x in v]
-            elif k == 'color':
-                v = int(v)
-            elif isinstance(v, (EmbedFooter, EmbedAuthor)):
-                v = v.to_dict()
+                elif k in ('image', 'thumbnail'):
+                    v = {'url': v}
+
+                elif isinstance(v, (EmbedFooter, EmbedAuthor)):
+                    v = v.to_dict()
             
-            d[k] = v
+                d[k] = v
 
         d['type'] = 'rich'
         return d

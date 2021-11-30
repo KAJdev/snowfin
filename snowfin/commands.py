@@ -10,7 +10,8 @@ class InteractionHandler:
     _specific_callbacks = {
         RequestType.APPLICATION_COMMAND: {},
         RequestType.MESSAGE_COMPONENT: {},
-        RequestType.APPLICATION_COMMAND_AUTOCOMPLETE: {}
+        RequestType.APPLICATION_COMMAND_AUTOCOMPLETE: {},
+        RequestType.MODAL_SUBMIT: {},
     }
 
     _generic_callbacks = {
@@ -20,7 +21,8 @@ class InteractionHandler:
             ComponentType.BUTTON: None,
             ComponentType.SELECT: None,
         },
-        RequestType.APPLICATION_COMMAND_AUTOCOMPLETE: None
+        RequestType.APPLICATION_COMMAND_AUTOCOMPLETE: None,
+        RequestType.MODAL_SUBMIT: None,
     }
 
     @classmethod

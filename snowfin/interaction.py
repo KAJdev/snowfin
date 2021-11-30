@@ -59,7 +59,8 @@ class Component:
     """
     custom_id: str
     component_type: ComponentType
-    values: Optional[List[str]]
+    values: Optional[List[str]] # for selects
+    value: Optional[str] # for inputs
 
 @dataclass
 class ContextCommand:
@@ -81,13 +82,4 @@ class Interaction:
     message: Optional[Dict]
 
     def __post_init__(self):
-        self.deferred = False
-    
-    async def defer(self):
-        """
-        Defer the interaction.
-        """
-        if self.deferred:
-            raise Exception('Interaction already deferred')
-        self.deferred = True
-        pass
+        self.responded = False
