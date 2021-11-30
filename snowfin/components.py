@@ -135,11 +135,11 @@ class Select:
         self.placeholder = placeholder
         self.disabled = disabled
 
-        self.options = [x.asdict() for x in options]
-        if len(self.options) == 0:
+        if len(options) == 0:
             raise ValueError("Select requires at least one option")
-        elif len(self.options) > 25:
+        elif len(options) > 25:
             raise ValueError("Select cannot have more than 25 options")
+        self.options = options
 
         self.min_values = min_values
         self.max_values = max_values
