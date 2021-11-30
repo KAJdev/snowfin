@@ -155,7 +155,7 @@ class Select:
     def add_option(self, option: SelectOption) -> None:
         if len(self.options) >= 25:
             raise ValueError("Select cannot have more than 25 options")
-        self.options.append(option.asdict())
+        self.options.append(option)
 
         return self
 
