@@ -11,8 +11,8 @@ from dacite import from_dict, config
 
 import snowfin.interaction
 from .commands import InteractionHandler
-from .response import _DiscordResponse, MessageResponse, EditResponse, DeferredResponse
-from .enums import RequestType, ResponseType
+from .response import _DiscordResponse
+from .enums import *
 
 __all__ = (
     'SlashCommand',
@@ -73,10 +73,10 @@ class Client:
                 config=config.Config(
                     cast=[
                         int,
-                        snowfin.interaction.ChannelType,
-                        snowfin.interaction.CommandType,
-                        snowfin.interaction.OptionType,
-                        snowfin.interaction.ComponentType,
+                        ChannelType,
+                        CommandType,
+                        OptionType,
+                        ComponentType,
                         RequestType
                     ]
                 )
