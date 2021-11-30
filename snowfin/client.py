@@ -128,9 +128,6 @@ class Client:
         request.ctx.responded = True
 
         if isinstance(resp, _DiscordResponse):
-            d = resp.to_dict()
-            print(d)
-
             if isinstance(resp, DeferredResponse):
                 if request.ctx.type == RequestType.MESSAGE_COMPONENT:
                     resp.type = ResponseType.COMPONENT_DEFER
@@ -138,7 +135,7 @@ class Client:
                     resp.type = ResponseType.DEFER
 
                 self.handle_deferred_routine(resp.coro, request)
-            return json(d)
+            return json(resp.to_dict())
         elif isinstance(resp, HTTPResponse):
             return resp
         else:
