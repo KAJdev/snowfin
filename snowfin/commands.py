@@ -1,7 +1,7 @@
 from typing import Coroutine
 
 from .enums import RequestType, ComponentType, CommandType
-from .interaction import Component
+from .interaction import Command, Component
 
 __all__ = (
     'InteractionHandler',
@@ -62,6 +62,12 @@ class InteractionHandler:
             return (
                 specific.get(data.custom_id, None) or (
                     generic.get(data.component_type, None) or generic.get(None, None)
+                )
+            )
+        elif isinstance(data, Command):
+            return (
+                specific.get(data.name, None) or (
+                    generic.get(data.type, None) or generic.get(None, None)
                 )
             )
         else:
