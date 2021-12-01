@@ -52,6 +52,8 @@ class HTTP:
         """
         Make a followup request
         """
+        print(f"Requesting {route.method} {route.url} with {_data}")
+
         async with aiohttp.ClientSession() as session:
             async with session.request(
                 route.method,
@@ -59,7 +61,7 @@ class HTTP:
                 headers=self.headers,
                 proxy=self.proxy,
                 proxy_auth=self.proxy_auth,
-                data=_data if _data is not None else None,
+                json=_data if _data is not None else None,
                 **kwargs
             ) as response:
 
@@ -81,6 +83,7 @@ class HTTP:
                 elif response.status >= 500:
                     raise DiscordInternalError(data)
                 else:
+                    print(f"Unknown error: {response.status}")
                     raise HTTPException(data)
 
     async def close(self) -> None:
@@ -96,9 +99,9 @@ class HTTP:
         **kwargs
     ) -> Any:
         """
-        Send a followup message
+        Send a message
         """
-        r = Route('POST', '/webhooks/{application_id}/{interaction_token}/messages/@original',
+        r = Route('POST', '/webhooks/{application_id}/{interaction_token}',
             application_id = request.ctx.application_id,
             interaction_token = request.ctx.token
         )

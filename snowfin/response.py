@@ -54,12 +54,11 @@ class DeferredResponse(_DiscordResponse):
     def __init__(
         self,
         task: Union[asyncio.Task, Callable] = None,
-        ephemperal: bool = False,
+        ephemeral: bool = False,
         **kwargs
     ) -> None:
 
-        if ephemperal:
-            kwargs['flags'] = 64
+        kwargs['flags'] = 64 * int(ephemeral)
 
         self.task = task
 

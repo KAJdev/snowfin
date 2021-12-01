@@ -21,11 +21,15 @@ class Emoji:
 
     @classmethod
     def from_str(cls, emoji_string: str):
+        if len(emoji_string) == 1:
+            return cls(name=emoji_string, id=None)
+
+        emoji_string = emoji_string.strip('<>')
         data = emoji_string.split(':')
         if len(data) == 3:
-            return cls(data[1], int(data[2]), animated='a' in data[0])
+            return cls(data[1], str(data[2]), animated='a' in data[0])
         elif len(data) == 2:
-            return cls(data[0], int(data[1]))
+            return cls(data[0], str(data[1]))
         else:
             raise ValueError(f"Invalid emoji string: {emoji_string}")
 
@@ -36,11 +40,15 @@ class Emoji:
         return f"<Emoji {self.name=} {self.id=} {self.animated=}>"
 
     def to_dict(self):
-        return {
+        d = {
             'name': self.name,
-            'id': self.id,
-            'animated': self.animated
+            'id': self.id
         }
+
+        if self.animated:
+            d['animated'] = True
+
+        return d
 
 class Button:
     def __init__(
