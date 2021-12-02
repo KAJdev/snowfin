@@ -3,7 +3,8 @@ from snowfin.response import MessageResponse
 
 bot = snowfin.Client('public_key')
 
-@snowfin.SlashCommand(name="hello")
+
+@snowfin.slash_command(name="hello")
 async def on_slash(interaction):
     return MessageResponse('world')
 

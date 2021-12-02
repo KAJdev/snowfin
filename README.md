@@ -20,7 +20,7 @@ from snowfin.response import MessageResponse
 
 bot = snowfin.Client('public_key')
 
-@snowfin.SlashCommand(name="hello")
+@snowfin.slash_command(name="hello")
 async def on_slash(request):
     return MessageResponse('world')
 
@@ -35,7 +35,7 @@ from snowfin.response import DeferredResponse, MessageResponse
 
 bot = snowfin.Client('public_key')
 
-@snowfin.SlashCommand(name="hello")
+@snowfin.slash_command(name="hello")
 async def on_slash(request):
     return DeferredResponse(on_slash_defer)
 

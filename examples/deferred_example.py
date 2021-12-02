@@ -4,7 +4,8 @@ from snowfin.response import DeferredResponse, MessageResponse
 
 bot = snowfin.Client('public_key')
 
-@snowfin.SlashCommand(name="hello")
+
+@snowfin.slash_command(name="hello")
 async def on_slash(interaction):
     return DeferredResponse(on_slash_defer)
 
