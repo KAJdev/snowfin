@@ -209,6 +209,9 @@ class Client:
 
         logger.info("Client initialized")
 
+    @property
+    def loop(self):
+        return self.app.loop
 
     def _handle_deferred_routine(self, routine: asyncio.Task, request):
         """
