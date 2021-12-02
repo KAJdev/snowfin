@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from .enums import ChannelType, OptionType, CommandType, ComponentType, RequestType
 
@@ -81,5 +81,6 @@ class Interaction:
     version: int
     message: Optional[Dict]
 
-    def __post_init__(self):
-        self.responded = False
+    # added later
+    client: Optional[Any]
+    responded: bool = False

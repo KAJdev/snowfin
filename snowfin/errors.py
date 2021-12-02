@@ -5,6 +5,10 @@ class DiscordError(Exception):
     """Base class for all discord errors."""
     pass
 
+class CogLoadError(DiscordError):
+    """Raised when a cog cannot be loaded."""
+    pass
+
 class HTTPException(DiscordError):
 
     """Base class for all HTTP-related errors."""

@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 from typing import Coroutine
 
 from sanic import Sanic, Request
@@ -9,6 +10,7 @@ from nacl.signing import VerifyKey
 from nacl.exceptions import BadSignatureError
 
 from dacite import from_dict, config
+from snowfin.errors import CogLoadError
 
 import snowfin.interaction
 from .commands import InteractionHandler, InteractionRoute
@@ -33,7 +35,7 @@ def mix_into_commands(func: Coroutine, type: RequestType, name: str = None, **kw
         result = await func(*args, **kwargs)
         return result
 
-    InteractionHandler.register(wrapper, type, name, **kwargs)
+    InteractionHandler.register(wrapper, type, name, func.__module__, **kwargs)
     return wrapper
 
 def SlashCommand(
@@ -103,7 +105,7 @@ def Anything(func) -> Coroutine:
         result = await func(*args, **kwargs)
         return result
 
-    InteractionHandler.register_catch_all(wrapper)
+    InteractionHandler.register_catch_all(wrapper, func.__module__)
     return wrapper
 
 
@@ -122,7 +124,12 @@ class Client:
         self.defer_after = defer_after
         self.defer_ephemeral = defer_ephemeral
 
+        self.log = lambda msg: logger.info(msg)
+        self.log_error = lambda msg: logger.error(msg)
+
         self.http: HTTP = HTTP(**dict((x, kwargs.get(x, None)) for x in ('proxy', 'proxy_auth', 'headers')))
+
+        self.__loaded_cogs = {}
 
         # create middlware for verifying that discord is the one who sent the interaction
         @self.app.on_request
@@ -154,6 +161,8 @@ class Client:
                 )
             )
 
+            request.ctx.client = self
+
         # send PONGs to PINGs
         @self.app.on_request
         async def ack_request(request: Request):
@@ -163,10 +172,12 @@ class Client:
         # handle user callbacks
         @self.app.post("/")
         async def handle_request(request: Request):
-            return await self.handle_request(request)
+            return await self._handle_request(request)
+
+        logger.info("Client initialized")
 
 
-    def handle_deferred_routine(self, routine: asyncio.Task, request):
+    def _handle_deferred_routine(self, routine: asyncio.Task, request):
         """
         Create a wrapper for the task supplied and wait on it.
         log any errors and pass the result onward
@@ -174,12 +185,12 @@ class Client:
         async def wrapper():
             try:
                 response = await routine
-                await self.handle_deferred_response(request, response)
+                await self._handle_deferred_response(request, response)
             except Exception as e:
                 logger.error(e.__repr__())
         task = asyncio.get_event_loop().create_task(wrapper())
 
-    async def handle_deferred_response(self, request, response):
+    async def _handle_deferred_response(self, request, response):
         """
         Take the result of a deferred callback task and send a request to the interaction webhook
         """
@@ -189,13 +200,13 @@ class Client:
             else:
                 raise Exception("Invalid response type")
 
-    async def handle_request(self, request: Request) -> HTTPResponse:
+    async def _handle_request(self, request: Request) -> HTTPResponse:
         """
         Grab the callback Coroutine and create a task.
         """
         func: InteractionRoute = InteractionHandler.get_func(request.ctx.data, request.ctx.type)
         if func:
-            task = asyncio.create_task(func(request))
+            task = asyncio.create_task(func(request.ctx))
 
             # auto defer if and only if the decorator and/or client told us too and it *can* be defered
             if (func.auto_defer if func.auto_defer is not None else self.auto_defer) and \
@@ -238,13 +249,15 @@ class Client:
 
                 # if someone passed in a callable, construct a task for them to keep syntax as clean as possible
                 if not isinstance(resp.task, asyncio.Task):
-                    resp.task = asyncio.create_task(resp.task(request))
+                    resp.task = asyncio.create_task(resp.task(request.ctx))
 
                 # start or continue the task and post the response to a webhook
-                self.handle_deferred_routine(resp.task, request)
-            x = resp.to_dict()
-            print(x)
-            return json(x)
+                self._handle_deferred_routine(resp.task, request)
+            
+            # do some logging and return the 'dictified' data
+            data = resp.to_dict()
+            if self.app.debug: self.log(data)
+            return json(data)
 
         elif isinstance(resp, HTTPResponse):
             # someone gave us a sanic response, Assume they know what they are doing
@@ -255,3 +268,29 @@ class Client:
 
     def run(self, host: str, port: int, **kwargs):
         self.app.run(host=host, port=port, access_log=False, **kwargs)
+
+    def add_cog(self, module_name: str):
+        resolved_name = importlib.util.resolve_name(module_name, __spec__.parent)
+
+        if resolved_name in self.__loaded_cogs:
+            raise CogLoadError(f"{module_name} already loaded")
+
+        try:
+            module = importlib.import_module(module_name)
+        except Exception as e:
+            raise CogLoadError(f"{module_name} failed to load: {e}")
+        self.__loaded_cogs[resolved_name] = module
+        if hasattr(module, "setup"):
+            module.setup(self)
+
+    def remove_cog(self, module: str):
+        module_name = importlib.util.resolve_name(module, __spec__.parent)
+        
+        if module_name not in self.__loaded_cogs:
+            raise ValueError(f"{module_name} not loaded")
+
+        module_ = self.__loaded_cogs.pop(module_name)
+
+        InteractionHandler.remove_module_references(module_name)
+        if hasattr(module_, "teardown"):
+            module_.teardown(self)

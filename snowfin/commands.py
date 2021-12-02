@@ -1,5 +1,4 @@
-from enum import auto
-from typing import Any, Coroutine, get_type_hints
+from typing import Any, Coroutine
 
 from .enums import RequestType, ComponentType, CommandType
 from .interaction import Command, Component
@@ -16,11 +15,13 @@ class InteractionRoute:
     def __init__(
         self,
         callable: Coroutine,
+        module: str,
         auto_defer: bool = None,
         defer_after: float = None,
         defer_ephemeral: bool = None
     ) -> None:
         self.routine = callable
+        self.module = module
         self.auto_defer = auto_defer
         self.defer_after = defer_after
         self.defer_ephemeral = defer_ephemeral
@@ -55,8 +56,8 @@ class InteractionHandler:
     _catch_all_callback = None
 
     @classmethod
-    def register_catch_all(cls, callback: Coroutine) -> None:
-        cls._catch_all_callback = InteractionRoute(callback)
+    def register_catch_all(cls, callback: Coroutine, module: str) -> None:
+        cls._catch_all_callback = InteractionRoute(callback, module)
 
     @classmethod
     def register(
@@ -64,12 +65,13 @@ class InteractionHandler:
         func: Coroutine,
         type: RequestType,
         name: str,
+        module: str,
         auto_defer: bool = None,
         defer_after: float = None,
         defer_ephemeral: bool = None,
         **kwargs
     ) -> None:
-        func = InteractionRoute(func, auto_defer, defer_after, defer_ephemeral)
+        func = InteractionRoute(func, module, auto_defer, defer_after, defer_ephemeral)
         if name is None:
             if type is RequestType.MESSAGE_COMPONENT:
                 component_type = kwargs.get('component_type', None)
@@ -116,3 +118,30 @@ class InteractionHandler:
             cb = cls._catch_all_callback
 
         return cb
+
+    @classmethod
+    def remove_module_references(cls, module_name: str):
+        to_remove = []
+        for type in cls._specific_callbacks:
+            for name, func in cls._specific_callbacks[type].items():
+                if func.module == module_name:
+                    to_remove.append((type, name))
+
+        for type, name in to_remove:
+            del cls._specific_callbacks[type][name]
+
+        for type in cls._generic_callbacks:
+            if isinstance(cls._generic_callbacks[type], InteractionRoute) and cls._generic_callbacks[type].module == module_name:
+                cls._generic_callbacks[type] = None
+                break
+
+            if isinstance(cls._generic_callbacks[type], dict):
+                for func in cls._generic_callbacks[type].values():
+                    if func is not None and func.module == module_name:
+                        cls._generic_callbacks[type][func] = None
+                        break
+
+        if cls._catch_all_callback is not None and cls._catch_all_callback.module == module_name:
+            cls._catch_all_callback = None
+
+        
