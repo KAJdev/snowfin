@@ -69,6 +69,14 @@ class Embed:
     author: EmbedAuthor = Empty
     fields: List[EmbedField] = Empty
 
+    def add_field(self, name: str, value: str, inline: bool = False):
+        if self.fields is Empty:
+            self.fields = []
+
+        self.fields.append(EmbedField(name, value, inline))
+
+        return self
+
     def to_dict(self):
         d = {}
 
