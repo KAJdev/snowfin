@@ -19,11 +19,13 @@ from .http import *
 from .enums import *
 
 __all__ = (
-    'SlashCommand',
-    'MessageComponent',
-    'Autocomplete',
-    'Modal',
-    'Anything',
+    'slash_command',
+    'message_component',
+    'autocomplete',
+    'modal',
+    'anything',
+    'on_start',
+    'on_stop',
     'Client'
 )
 
@@ -38,7 +40,7 @@ def mix_into_commands(func: Coroutine, type: RequestType, name: str = None, **kw
     InteractionHandler.register(wrapper, type, name, func.__module__, **kwargs)
     return wrapper
 
-def SlashCommand(
+def slash_command(
     name: str = None,
     type: CommandType = None,
     auto_defer: bool = None,
@@ -60,7 +62,7 @@ def SlashCommand(
         )
     return decorator
 
-def MessageComponent(
+def message_component(
     custom_id: str = None,
     type: ComponentType = None,
     auto_defer: bool = None,
@@ -81,7 +83,7 @@ def MessageComponent(
         )
     return decorator
 
-def Autocomplete(name: str = None) -> Coroutine:
+def autocomplete(name: str = None) -> Coroutine:
     """
     A decorator for creating autocomplete callbacks.
     """
@@ -89,7 +91,7 @@ def Autocomplete(name: str = None) -> Coroutine:
         return mix_into_commands(func, RequestType.APPLICATION_COMMAND_AUTOCOMPLETE, name)
     return decorator
 
-def Modal(custom_id: str = None) -> Coroutine:
+def modal(custom_id: str = None) -> Coroutine:
     """
     A decorator for creating modal submit callbacks.
     """
@@ -97,7 +99,7 @@ def Modal(custom_id: str = None) -> Coroutine:
         return mix_into_commands(func, RequestType.MODAL_SUBMIT, custom_id)
     return decorator
 
-def Anything(func) -> Coroutine:
+def anything(func) -> Coroutine:
     """
     A decorator for creating catch all callbacks. Will only call if no other callbacks match.
     """
@@ -106,6 +108,28 @@ def Anything(func) -> Coroutine:
         return result
 
     InteractionHandler.register_catch_all(wrapper, func.__module__)
+    return wrapper
+
+def on_start(func) -> Coroutine:
+    """
+    A decorator for creating on_start callbacks. Called when the webserver has started.
+    """
+    async def wrapper(*args, **kwargs):
+        result = await func(*args, **kwargs)
+        return result
+
+    InteractionHandler.register_on_server_start(wrapper, func.__module__)
+    return wrapper
+
+def on_stop(func) -> Coroutine:
+    """
+    A decorator for creating on_stop callbacks. Called when the webserver is stopping.
+    """
+    async def wrapper(*args, **kwargs):
+        result = await func(*args, **kwargs)
+        return result
+
+    InteractionHandler.register_on_server_stop(wrapper, func.__module__)
     return wrapper
 
 
@@ -130,6 +154,15 @@ class Client:
         self.http: HTTP = HTTP(**dict((x, kwargs.get(x, None)) for x in ('proxy', 'proxy_auth', 'headers')))
 
         self.__loaded_cogs = {}
+
+        # create some middleware for start and stop events
+        @self.app.listener('after_server_start')
+        async def on_start(app, loop):
+            await asyncio.gather(*(x(self) for x in InteractionHandler._on_server_start_callbacks))
+
+        @self.app.listener('before_server_stop')
+        async def on_stop(app, loop):
+            await asyncio.gather(*(x(self) for x in InteractionHandler._on_server_stop_callbacks))
 
         # create middlware for verifying that discord is the one who sent the interaction
         @self.app.on_request

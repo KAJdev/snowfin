@@ -55,9 +55,20 @@ class InteractionHandler:
 
     _catch_all_callback = None
 
+    _on_server_start_callbacks = []
+    _on_server_stop_callbacks = []
+
     @classmethod
     def register_catch_all(cls, callback: Coroutine, module: str) -> None:
         cls._catch_all_callback = InteractionRoute(callback, module)
+
+    @classmethod
+    def register_on_server_start(cls, callback: Coroutine, module: str) -> None:
+        cls._on_server_start_callbacks.append(InteractionRoute(callback, module))
+
+    @classmethod
+    def register_on_server_stop(cls, callback: Coroutine, module: str) -> None:
+        cls._on_server_stop_callbacks.append(InteractionRoute(callback, module))
 
     @classmethod
     def register(
@@ -143,5 +154,21 @@ class InteractionHandler:
 
         if cls._catch_all_callback is not None and cls._catch_all_callback.module == module_name:
             cls._catch_all_callback = None
+
+        to_remove = []
+        for func in cls._on_server_start_callbacks:
+            if func.module == module_name:
+                to_remove.append(func)
+
+        for func in to_remove:
+            cls._on_server_start_callbacks.remove(func)
+
+        to_remove = []
+        for func in cls._on_server_stop_callbacks:
+            if func.module == module_name:
+                to_remove.append(func)
+        
+        for func in to_remove:
+            cls._on_server_stop_callbacks.remove(func)
 
         
