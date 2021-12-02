@@ -5,7 +5,7 @@ from snowfin.embed import Embed
 bot = snowfin.Client('public_key')
 
 @snowfin.SlashCommand(name="hello")
-async def on_slash(request):
+async def on_slash(interaction):
     return MessageResponse(embed=Embed(
         title="Embed Title",
         description="Embed Description",
