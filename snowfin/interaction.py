@@ -83,4 +83,8 @@ class Interaction:
 
     # added later
     client: Optional[Any]
+    author: Optional[dict]
     responded: bool = False
+
+    def __post_init__(self):
+        self.author = self.user if self.user else self.member
