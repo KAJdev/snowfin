@@ -250,7 +250,6 @@ class Client:
                 # we want to defer automatically and keep the original task going
                 # so we wait for up to the timeout, then construct a DeferredResponse ourselves
                 # then handle_deferred_routine() will do the rest
-                print("waiting for auto defer")
                 done, pending = await asyncio.wait([task], timeout = func.defer_after if func.defer_after is not None else self.defer_after)
 
 
@@ -259,9 +258,7 @@ class Client:
                     resp = DeferredResponse(task,
                         ephemeral=func.defer_ephemeral if func.defer_ephemeral is not None else self.defer_ephemeral
                     )
-                    print("sending auto defer")
                 else:
-                    print("task returned")
                     # the task returned in time, get the result and use that like normal
                     resp = task.result()
             else:
