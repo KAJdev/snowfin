@@ -253,11 +253,11 @@ class Client:
         Grab the callback Coroutine and create a task.
         """
         # handle the before requests
-        await asyncio.gather(*(x(request) for x in InteractionHandler._before_callbacks))
+        await asyncio.gather(*(x(self, request) for x in InteractionHandler._before_callbacks))
 
         func: InteractionRoute = InteractionHandler.get_func(request.ctx.data, request.ctx.type)
         if func:
-            task = asyncio.create_task(func(request.ctx))
+            task = asyncio.create_task(func(self, request.ctx))
 
             # auto defer if and only if the decorator and/or client told us too and it *can* be defered
             if (func.auto_defer if func.auto_defer is not None else self.auto_defer) and \
@@ -297,7 +297,7 @@ class Client:
 
                 # if someone passed in a callable, construct a task for them to keep syntax as clean as possible
                 if not isinstance(resp.task, asyncio.Task):
-                    resp.task = asyncio.create_task(resp.task(request.ctx))
+                    resp.task = asyncio.create_task(resp.task(self, request.ctx))
 
                 # start or continue the task and post the response to a webhook
                 self._handle_deferred_routine(resp.task, request)
