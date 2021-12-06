@@ -26,6 +26,7 @@ __all__ = (
     'anything',
     'on_start',
     'on_stop',
+    'before_request',
     'Client'
 )
 
@@ -130,6 +131,17 @@ def on_stop(func) -> Coroutine:
         return result
 
     InteractionHandler.register_on_server_stop(wrapper, func.__module__)
+    return wrapper
+
+def before_request(func) -> Coroutine:
+    """
+    A decorator for creating before_request callbacks. Called before every request regardless of type.
+    """
+    async def wrapper(*args, **kwargs):
+        result = await func(*args, **kwargs)
+        return result
+
+    InteractionHandler.register_before(wrapper, func.__module__)
     return wrapper
 
 

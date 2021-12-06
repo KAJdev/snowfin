@@ -57,6 +57,7 @@ class InteractionHandler:
 
     _on_server_start_callbacks = []
     _on_server_stop_callbacks = []
+    _before_callbacks = []
 
     @classmethod
     def register_catch_all(cls, callback: Coroutine, module: str) -> None:
@@ -69,6 +70,10 @@ class InteractionHandler:
     @classmethod
     def register_on_server_stop(cls, callback: Coroutine, module: str) -> None:
         cls._on_server_stop_callbacks.append(InteractionRoute(callback, module))
+
+    @classmethod
+    def register_before(cls, callback: Coroutine, module: str) -> None:
+        cls._before_callbacks.append(InteractionRoute(callback, module))
 
     @classmethod
     def register(
@@ -155,20 +160,8 @@ class InteractionHandler:
         if cls._catch_all_callback is not None and cls._catch_all_callback.module == module_name:
             cls._catch_all_callback = None
 
-        to_remove = []
-        for func in cls._on_server_start_callbacks:
-            if func.module == module_name:
-                to_remove.append(func)
-
-        for func in to_remove:
-            cls._on_server_start_callbacks.remove(func)
-
-        to_remove = []
-        for func in cls._on_server_stop_callbacks:
-            if func.module == module_name:
-                to_remove.append(func)
-        
-        for func in to_remove:
-            cls._on_server_stop_callbacks.remove(func)
+        cls._on_server_start_callbacks = list(filter(lambda x: x.module != module_name, cls._on_server_start_callbacks))
+        cls._on_server_stop_callbacks = list(filter(lambda x: x.module != module_name, cls._on_server_stop_callbacks))
+        cls._before_callbacks = list(filter(lambda x: x.module != module_name, cls._before_callbacks))
 
         
