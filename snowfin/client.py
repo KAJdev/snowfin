@@ -252,6 +252,9 @@ class Client:
         """
         Grab the callback Coroutine and create a task.
         """
+        # handle the before requests
+        await asyncio.gather(*(x(request) for x in InteractionHandler._before_callbacks))
+
         func: InteractionRoute = InteractionHandler.get_func(request.ctx.data, request.ctx.type)
         if func:
             task = asyncio.create_task(func(request.ctx))
