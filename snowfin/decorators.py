@@ -5,7 +5,7 @@ from typing import Callable, Optional, Union
 from attr import has
 
 from snowfin.enums import ChannelType, CommandType, OptionType
-from .interaction import Choice, Option
+from .models import Choice, Option
 
 __all__ = (
     'SlashCommand',
@@ -71,7 +71,7 @@ class SlashCommand(InteractionCommand):
         }
 
         if self.options:
-            d['options'] = [asdict(o) for o in self.options]
+            d['options'] = [o.to_dict() for o in self.options]
 
         return d
 
@@ -92,6 +92,13 @@ class SlashCommand(InteractionCommand):
 @dataclass
 class ContextMenu(InteractionCommand):
     type: CommandType
+
+    def to_dict(self):
+        return {
+            'name': self.name,
+            'type': self.type.value,
+            'default_permission': self.default_permission
+        }
 
 def slash_command(
     name: str,

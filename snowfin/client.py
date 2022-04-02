@@ -17,7 +17,7 @@ from nacl.exceptions import BadSignatureError
 from dacite import from_dict, config
 from snowfin.errors import CogLoadError
 
-import snowfin.interaction
+import snowfin.models
 from .decorators import InteractionCommand
 from .response import _DiscordResponse, DeferredResponse
 from .http import *
@@ -121,7 +121,7 @@ class Client:
         async def parse_request(request: Request):
             request.ctx = from_dict(
                 data= request.json,
-                data_class=snowfin.interaction.Interaction,
+                data_class=snowfin.models.Interaction,
                 config=config.Config(
                     cast=[
                         int,
@@ -207,6 +207,8 @@ class Client:
             pass
         elif request.ctx.type is RequestType.MODAL_SUBMIT:
             pass
+
+        print(f"getting callback for {request.ctx.type}: found {func}")
 
         if func:
             task = asyncio.create_task(func(self, request.ctx))

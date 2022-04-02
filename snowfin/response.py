@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 import asyncio
 
 from .embed import Embed
-from .interaction import Choice
+from .models import Choice
 from .enums import ResponseType
 from .components import Components, Button, Select, TextInput
 
