@@ -1,8 +1,13 @@
 import asyncio
+from contextvars import Context
+from dataclasses import dataclass
 import importlib
-from typing import Coroutine
+import inspect
+import sys
+from typing import Callable, Coroutine, Optional
 
 from sanic import Sanic, Request
+import sanic
 from sanic.response import HTTPResponse, json
 from sanic.log import logger
 
@@ -13,141 +18,26 @@ from dacite import from_dict, config
 from snowfin.errors import CogLoadError
 
 import snowfin.interaction
-from .commands import InteractionHandler, InteractionRoute
+from .decorators import InteractionCommand
 from .response import _DiscordResponse, DeferredResponse
 from .http import *
+from .decorators import *
 from .enums import *
 
 __all__ = (
-    'slash_command',
-    'message_component',
-    'autocomplete',
-    'modal',
-    'anything',
-    'on_start',
-    'on_stop',
-    'before_request',
-    'Client'
+    'Client',
+    'AutoDefer',
 )
 
-def mix_into_commands(func: Coroutine, type: RequestType, name: str = None, **kwargs) -> Coroutine:
-    """
-    A global wrapper of a wrapper to add routines to a class object
-    """
-    async def wrapper(*args, **kwargs):
-        result = await func(*args, **kwargs)
-        return result
-
-    InteractionHandler.register(wrapper, type, name, func.__module__, **kwargs)
-    return wrapper
-
-def slash_command(
-    name: str = None,
-    type: CommandType = None,
-    auto_defer: bool = None,
-    defer_after: float = None,
-    defer_ephemeral: bool = None
-) -> Coroutine:
-    """
-    A decorator for creating slash command callbacks. If name and type are supplied, name is used.
-    """
-    def decorator(func):
-        return mix_into_commands(
-            func,
-            RequestType.APPLICATION_COMMAND,
-            name,
-            command_type=type,
-            auto_defer=auto_defer,
-            defer_after=defer_after,
-            defer_ephemeral=defer_ephemeral
-        )
-    return decorator
-
-def message_component(
-    custom_id: str = None,
-    type: ComponentType = None,
-    auto_defer: bool = None,
-    defer_after: float = None,
-    defer_ephemeral: bool = None
-) -> Coroutine:
-    """
-    A decorator for creating message component callbacks. If custom_id and type are supplied, custom_id is used.
-    """
-    def decorator(func):
-        return mix_into_commands(
-            func, RequestType.MESSAGE_COMPONENT,
-            custom_id,
-            component_type=type,
-            auto_defer=auto_defer,
-            defer_after=defer_after,
-            defer_ephemeral=defer_ephemeral
-        )
-    return decorator
-
-def autocomplete(name: str = None) -> Coroutine:
-    """
-    A decorator for creating autocomplete callbacks.
-    """
-    def decorator(func):
-        return mix_into_commands(func, RequestType.APPLICATION_COMMAND_AUTOCOMPLETE, name)
-    return decorator
-
-def modal(custom_id: str = None) -> Coroutine:
-    """
-    A decorator for creating modal submit callbacks.
-    """
-    def decorator(func):
-        return mix_into_commands(func, RequestType.MODAL_SUBMIT, custom_id)
-    return decorator
-
-def anything(func) -> Coroutine:
-    """
-    A decorator for creating catch all callbacks. Will only call if no other callbacks match.
-    """
-    async def wrapper(*args, **kwargs):
-        result = await func(*args, **kwargs)
-        return result
-
-    InteractionHandler.register_catch_all(wrapper, func.__module__)
-    return wrapper
-
-def on_start(func) -> Coroutine:
-    """
-    A decorator for creating on_start callbacks. Called when the webserver has started.
-    """
-    async def wrapper(*args, **kwargs):
-        result = await func(*args, **kwargs)
-        return result
-
-    InteractionHandler.register_on_server_start(wrapper, func.__module__)
-    return wrapper
-
-def on_stop(func) -> Coroutine:
-    """
-    A decorator for creating on_stop callbacks. Called when the webserver is stopping.
-    """
-    async def wrapper(*args, **kwargs):
-        result = await func(*args, **kwargs)
-        return result
-
-    InteractionHandler.register_on_server_stop(wrapper, func.__module__)
-    return wrapper
-
-def before_request(func) -> Coroutine:
-    """
-    A decorator for creating before_request callbacks. Called before every request regardless of type.
-    """
-    async def wrapper(*args, **kwargs):
-        result = await func(*args, **kwargs)
-        return result
-
-    InteractionHandler.register_before(wrapper, func.__module__)
-    return wrapper
-
+@dataclass
+class AutoDefer:
+    enabled: bool = False
+    timeout: int = 1
+    ephemeral: bool = False
 
 class Client:
 
-    def __init__(self, verify_key: str, app: Sanic = None, auto_defer: bool = False, defer_after: float = 2, defer_ephemeral: bool = False, logging_level: int = 1, **kwargs):
+    def __init__(self, verify_key: str, application_id: int, sync_commands: bool = False, token: str = None, auto_defer: AutoDefer | bool = AutoDefer(), app: Sanic = None, logging_level: int = 1, **kwargs):
         # create a new app if none is not supplied
         if app is None:
             self.app = Sanic("snowfin-interactions")
@@ -156,25 +46,63 @@ class Client:
         self.verify_key = VerifyKey(bytes.fromhex(verify_key))
 
         # automatic defer options
-        self.auto_defer = auto_defer
-        self.defer_after = defer_after
-        self.defer_ephemeral = defer_ephemeral
+        self.auto_defer = auto_defer or AutoDefer()
+
+        if self.auto_defer is True:
+            self.auto_defer = AutoDefer(enabled=True)
+
+        self.sync_commands = sync_commands
 
         self.log = lambda msg: logger.info(msg)
         self.log_error = lambda msg: logger.error(msg)
 
-        self.http: HTTP = HTTP(**dict((x, kwargs.get(x, None)) for x in ('proxy', 'proxy_auth', 'headers')))
+        self.http: HTTP = HTTP(
+            application_id=application_id,
+            token=token,
+            proxy=kwargs.get('proxy', None),
+            proxy_auth=kwargs.get('proxy_auth', None),
+            headers=kwargs.get('headers', None),
+        )
 
         self.__loaded_cogs = {}
+
+        # listeners for events
+        self._listeners: dict[str, list] = {}
+
+        # commands
+        self.commands: list[InteractionCommand] = []
+
+        # gather callbacks
+        self._gather_callbacks()
 
         # create some middleware for start and stop events
         @self.app.listener('after_server_start')
         async def on_start(app, loop):
-            await asyncio.gather(*(x(self) for x in InteractionHandler._on_server_start_callbacks))
+            if self.sync_commands:
+
+                type_classes = {
+                    CommandType.CHAT_INPUT.value: SlashCommand,
+                    CommandType.MESSAGE.value: ContextMenu,
+                    CommandType.USER.value: ContextMenu
+                }
+
+                current_commands = [
+                    from_dict(data=cmd, data_class=type_classes.get(cmd.get('type')))
+                    for cmd in await self.http.get_global_application_commands()
+                ]
+
+                if [x.to_dict() for x in current_commands] != [x.to_dict() for x in self.commands]:
+                    self.log(f"syncing {len(self.commands)} commands")
+                    await self.http.bulk_overwrite_global_application_commands(
+                        [command.to_dict() for command in self.commands]
+                    )
+                    self.log(f"synced {len(self.commands)} commands")
+
+            self.dispatch('start')
 
         @self.app.listener('before_server_stop')
         async def on_stop(app, loop):
-            await asyncio.gather(*(x(self) for x in InteractionHandler._on_server_stop_callbacks))
+            self.dispatch('stop')
 
         # create middlware for verifying that discord is the one who sent the interaction
         @self.app.on_request
@@ -223,7 +151,10 @@ class Client:
 
     @property
     def loop(self):
-        return self.app.loop
+        try:
+            return self.app.loop
+        except sanic.exceptions.SanicException:
+            return None
 
     def _handle_deferred_routine(self, routine: asyncio.Task, request):
         """
@@ -236,7 +167,7 @@ class Client:
                 await self._handle_deferred_response(request, response)
             except Exception as e:
                 logger.error(e.__repr__())
-        task = asyncio.get_event_loop().create_task(wrapper())
+        asyncio.create_task(wrapper())
 
     async def _handle_deferred_response(self, request, response):
         """
@@ -253,25 +184,48 @@ class Client:
         Grab the callback Coroutine and create a task.
         """
         # handle the before requests
-        await asyncio.gather(*(x(self, request) for x in InteractionHandler._before_callbacks))
+        self.dispatch('before_request', request.ctx)
 
-        func: InteractionRoute = InteractionHandler.get_func(request.ctx.data, request.ctx.type)
+        func: Optional[Callable] = None
+
+        print(request.ctx.type)
+
+        if request.ctx.type is RequestType.APPLICATION_COMMAND:
+            cmd: SlashCommand = self.get_command(request.ctx.data.name)
+            if cmd:
+                func = cmd.callback
+        elif request.ctx.type is RequestType.APPLICATION_COMMAND_AUTOCOMPLETE:
+            cmd: SlashCommand = self.get_command(request.ctx.data.command.name)
+            if cmd:
+                selected_option = None
+
+                for option in request.ctx.data.options:
+                    if option.focused:
+                        selected_option = option
+                        break
+
+                func = cmd.autocomplete_callbacks.get(selected_option.name) if selected_option else None
+        elif request.ctx.type is RequestType.MESSAGE_COMPONENT:
+            pass
+        elif request.ctx.type is RequestType.MODAL_SUBMIT:
+            pass
+
         if func:
             task = asyncio.create_task(func(self, request.ctx))
 
             # auto defer if and only if the decorator and/or client told us too and it *can* be defered
-            if (func.auto_defer if func.auto_defer is not None else self.auto_defer) and \
+            if self.auto_defer.enabled and \
                 request.ctx.type in (RequestType.APPLICATION_COMMAND, RequestType.MESSAGE_COMPONENT):
                 # we want to defer automatically and keep the original task going
                 # so we wait for up to the timeout, then construct a DeferredResponse ourselves
                 # then handle_deferred_routine() will do the rest
-                done, pending = await asyncio.wait([task], timeout = func.defer_after if func.defer_after is not None else self.defer_after)
+                done, pending = await asyncio.wait([task], timeout = self.auto_defer.timeout)
 
 
                 if task in pending:
                     # task didn't return in time, let it keep going and construct a defer for it
                     resp = DeferredResponse(task,
-                        ephemeral=func.defer_ephemeral if func.defer_ephemeral is not None else self.defer_ephemeral
+                        ephemeral=self.auto_defer.ephemeral
                     )
                 else:
                     # the task returned in time, get the result and use that like normal
@@ -339,6 +293,60 @@ class Client:
 
         module_ = self.__loaded_cogs.pop(module_name)
 
-        InteractionHandler.remove_module_references(module_name)
         if hasattr(module_, "teardown"):
             module_.teardown(self)
+
+    def _gather_callbacks(self) -> None:
+        """
+        Gather all callbacks from loaded modules
+        """
+
+        def process(_cmds) -> None:
+
+            for func in _cmds:
+                if isinstance(func, InteractionCommand):
+                    self.add_interaction_command(func)
+                elif isinstance(func, Listener):
+                    self.add_listener(func)
+
+            self.log(f"Loaded {len(_cmds)} callbacks")
+
+        process(
+            [obj for _, obj in inspect.getmembers(sys.modules["__main__"]) + inspect.getmembers(self) if isinstance(obj, (InteractionCommand, Listener))]
+        )
+
+    def add_interaction_command(self, command: InteractionCommand):
+        """
+        Add a command to the client
+        """
+        if command.name in [x.name for x in self.commands]:
+            raise ValueError(f"/{command.name} already exists")
+
+        self.commands.append(command)
+
+    def add_listener(self, listener: Listener):
+        """
+        Add a listener to the client
+        """
+        if listener in self._listeners.get(listener.event_name, []):
+            raise ValueError(f"{listener} already exists")
+
+        self._listeners.setdefault(listener.event_name, []).append(listener)
+
+    def dispatch(self, event: str, *args, **kwargs) -> None:
+        """
+        Dispatch an event to all listeners
+        """
+        for listener in self._listeners.get(event, []):
+            asyncio.create_task(
+                listener(*args, **kwargs),
+                name=f"snowfin:: {event}"
+            )
+
+    def get_command(self, name: str) -> InteractionCommand:
+        """
+        Get a command by name
+        """
+        for command in self.commands:
+            if command.name == name:
+                return command

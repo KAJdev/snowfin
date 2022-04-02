@@ -12,7 +12,7 @@ __license__ = 'MIT'
 __copyright__ = 'Copyright 2021-present kaj'
 __version__ = '1.0'
 
-from .interaction import *
+from .decorators import *
 from .response import *
 from .embed import *
 from .client import *
