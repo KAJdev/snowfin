@@ -188,8 +188,6 @@ class Client:
 
         func: Optional[Callable] = None
 
-        print(request.ctx.type)
-
         if request.ctx.type is RequestType.APPLICATION_COMMAND:
             cmd: SlashCommand = self.get_command(request.ctx.data.name)
             if cmd:
