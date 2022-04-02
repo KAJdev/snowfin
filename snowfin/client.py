@@ -1,10 +1,12 @@
 import asyncio
+from contextlib import suppress
 from contextvars import Context
 from dataclasses import dataclass
 import importlib
 import inspect
 import sys
 from typing import Callable, Coroutine, Optional
+from functools import partial
 
 from sanic import Sanic, Request
 import sanic
@@ -23,6 +25,8 @@ from .response import _DiscordResponse, DeferredResponse
 from .http import *
 from .decorators import *
 from .enums import *
+
+from json import dumps
 
 __all__ = (
     'Client',
@@ -66,11 +70,13 @@ class Client:
 
         self.__loaded_cogs = {}
 
-        # listeners for events
+        # listeners for events (read only events)
         self._listeners: dict[str, list] = {}
 
-        # commands
+        # strict callbacks (returns a response)
         self.commands: list[InteractionCommand] = []
+        self.modals: dict[str, ModalCallback] = {}
+        self.components: dict[tuple[str, ComponentType], ComponentCallback] = {}
 
         # gather callbacks
         self._gather_callbacks()
@@ -119,6 +125,10 @@ class Client:
         # middlware for constructing dataclasses from json
         @self.app.on_request
         async def parse_request(request: Request):
+
+            if self.app.debug:
+                self.log(f"{request.method} {request.path}\n\n{dumps(request.json, indent=2)}")
+
             request.ctx = from_dict(
                 data= request.json,
                 data_class=snowfin.models.Interaction,
@@ -189,29 +199,50 @@ class Client:
         func: Optional[Callable] = None
 
         if request.ctx.type is RequestType.APPLICATION_COMMAND:
-            cmd: SlashCommand = self.get_command(request.ctx.data.name)
-            if cmd:
-                func = cmd.callback
-        elif request.ctx.type is RequestType.APPLICATION_COMMAND_AUTOCOMPLETE:
-            cmd: SlashCommand = self.get_command(request.ctx.data.command.name)
-            if cmd:
-                selected_option = None
+            self.dispatch('command', request.ctx)
 
+            if cmd := self.get_command(request.ctx.data.name):
+                kwargs = {}
+                for argument,type in cmd.callback.__annotations__.items():
+                    if argument in ('self', 'ctx', 'context'):
+                        continue
+
+                    if option := next(filter(lambda x: x.name == argument, request.ctx.data.options), None):
+                        with suppress(Exception):
+                            option = type(option.value)
+
+                        kwargs[argument] = option
+                        
+
+                func = partial(cmd.callback, request.ctx, **kwargs)
+
+        elif request.ctx.type is RequestType.APPLICATION_COMMAND_AUTOCOMPLETE:
+            self.dispatch('autocomplete', request.ctx)
+
+            if cmd := self.get_command(request.ctx.data.name):
                 for option in request.ctx.data.options:
                     if option.focused:
-                        selected_option = option
+                        callback = cmd.autocomplete_callbacks.get(option.name)
+                        if callback:
+                            func = partial(callback, request.ctx, option.value)
                         break
 
-                func = cmd.autocomplete_callbacks.get(selected_option.name) if selected_option else None
         elif request.ctx.type is RequestType.MESSAGE_COMPONENT:
-            pass
+            self.dispatch('component', request.ctx)
+
+            if component := self.components.get((request.ctx.data.custom_id, request.ctx.data.type)):
+                func = partial(component, request.ctx)
+
         elif request.ctx.type is RequestType.MODAL_SUBMIT:
-            pass
+            self.dispatch('modal', request.ctx)
+
+            if modal := self.modals.get(request.ctx.data.custom_id):
+                func = partial(modal, request.ctx)
 
         print(f"getting callback for {request.ctx.type}: found {func}")
 
         if func:
-            task = asyncio.create_task(func(self, request.ctx))
+            task = asyncio.create_task(func())
 
             # auto defer if and only if the decorator and/or client told us too and it *can* be defered
             if self.auto_defer.enabled and \
@@ -264,9 +295,7 @@ class Client:
         elif isinstance(resp, HTTPResponse):
             # someone gave us a sanic response, Assume they know what they are doing
             return resp
-            
-        else:
-            return json({"error": "invalid response type"}, status=500)
+
 
     def run(self, host: str, port: int, **kwargs):
         self.app.run(host=host, port=port, access_log=False, **kwargs)
@@ -308,11 +337,15 @@ class Client:
                     self.add_interaction_command(func)
                 elif isinstance(func, Listener):
                     self.add_listener(func)
+                elif isinstance(func, ComponentCallback):
+                    self.add_component_callback(func)
+                elif isinstance(func, ModalCallback):
+                    self.add_modal_callback(func)
 
             self.log(f"Loaded {len(_cmds)} callbacks")
 
         process(
-            [obj for _, obj in inspect.getmembers(sys.modules["__main__"]) + inspect.getmembers(self) if isinstance(obj, (InteractionCommand, Listener))]
+            [obj for _, obj in inspect.getmembers(sys.modules["__main__"]) + inspect.getmembers(self) if isinstance(obj, (InteractionCommand, Listener, ComponentCallback, ModalCallback))]
         )
 
     def add_interaction_command(self, command: InteractionCommand):
@@ -328,15 +361,36 @@ class Client:
         """
         Add a listener to the client
         """
+        listener.event_name = listener.event_name.removeprefix("on_")
+
         if listener in self._listeners.get(listener.event_name, []):
             raise ValueError(f"{listener} already exists")
 
         self._listeners.setdefault(listener.event_name, []).append(listener)
 
+    def add_component_callback(self, callback: ComponentCallback):
+        """
+        Add a component callback to the client
+        """
+        if (callback.custom_id, callback.type) in self.components:
+            raise ValueError(f"{callback.type} with custom_id `{callback.custom_id}` already exists")
+
+        self.components[(callback.custom_id, callback.type)] = callback
+
+    def add_modal_callback(self, callback: ModalCallback):
+        """
+        Add a modal callback to the client
+        """
+        if callback.custom_id in self.modals:
+            raise ValueError(f"modal with custom_id `{callback.custom_id}` already exists")
+
+        self.modals[callback.custom_id] = callback
+
     def dispatch(self, event: str, *args, **kwargs) -> None:
         """
         Dispatch an event to all listeners
         """
+        self.log(f"Dispatching {event}")
         for listener in self._listeners.get(event, []):
             asyncio.create_task(
                 listener(*args, **kwargs),

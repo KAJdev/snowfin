@@ -2,13 +2,14 @@ from contextvars import Context
 from dataclasses import dataclass, field, asdict
 from typing import Callable, Optional, Union
 
-from attr import has
-
-from snowfin.enums import ChannelType, CommandType, OptionType
-from .models import Choice, Option
+from snowfin.enums import ChannelType, CommandType, ComponentType, OptionType
+from .models import Choice
 
 __all__ = (
     'SlashCommand',
+    'ComponentCallback',
+    'ModalCallback',
+    'SlashOption',
     'ContextMenu',
     'Listener',
     'slash_command',
@@ -17,6 +18,10 @@ __all__ = (
     'message_command',
     'user_command',
     'listen',
+    'component_callback',
+    'select_callback',
+    'button_callback',
+    'modal_callback',
 )
 
 @dataclass
@@ -27,6 +32,29 @@ class InteractionCommand:
     name: str
     callback: Optional[Callable]
     default_permission: bool
+
+    def __call__(self, context, *args, **kwargs):
+        return self.callback(context, *args, **kwargs)
+
+@dataclass
+class ComponentCallback:
+    """
+    Discord component callback
+    """
+    custom_id: str
+    callback: Callable
+    type: ComponentType
+
+    def __call__(self, context, *args, **kwargs):
+        return self.callback(context, *args, **kwargs)
+
+@dataclass
+class ModalCallback:
+    """
+    Discord modal callback
+    """
+    custom_id: str
+    callback: Callable
 
     def __call__(self, context, *args, **kwargs):
         return self.callback(context, *args, **kwargs)
@@ -43,18 +71,56 @@ class Listener:
         return self.callback(context, *args, **kwargs)
 
 @dataclass
+class SlashOption:
+    """
+    Discord command option
+    """
+    name: str
+    type: OptionType
+    description: str
+    min_value: Optional[Union[int, float]] = None
+    max_value: Optional[Union[int, float]] = None
+    choices: Optional[list[Choice]] = None
+    options: Optional[list['SlashOption']] = None
+    channel_types: Optional[list[ChannelType]] = None
+    required: bool = False
+    autocomplete: bool = False
+
+    def to_dict(self):
+        d = {
+            'name': self.name,
+            'type': self.type.value if isinstance(self.type, OptionType) else self.type,
+            'description': self.description,
+            'min_value': self.min_value,
+            'max_value': self.max_value,
+            'required': self.required,
+            'autocomplete': self.autocomplete
+        }
+
+        if self.choices:
+            d['choices'] = [c.to_dict() for c in self.choices]
+
+        if self.options:
+            d['options'] = [o.to_dict() for o in self.options]
+
+        if self.channel_types:
+            d['channel_types'] = [c.value for c in self.channel_types]
+
+        return d
+
+@dataclass
 class SlashCommand(InteractionCommand):
     cmd_id = None
 
     name: str
     description: str = "No Description Set"
 
-    options: list[Option | dict] = field(default_factory=list)
+    options: list[SlashOption | dict] = field(default_factory=list)
     autocomplete_callbacks: dict = field(default_factory=dict)
 
     def __post_init__(self):
         if self.options:
-            self.options = [Option(**o) if isinstance(o, dict) else o for o in self.options]
+            self.options = [SlashOption(**o) if isinstance(o, dict) else o for o in self.options]
 
         if self.callback is not None:
             if hasattr(self.callback, 'options'):
@@ -80,10 +146,14 @@ class SlashCommand(InteractionCommand):
             self.autocomplete_callbacks[option_name] = callback
 
             # set the autocomplete value in the corresponding option
+            if self.options is None:
+                self.options = []
             for option in self.options:
                 if option.name == option_name:
                     option.autocomplete = True
                     break
+            else:
+                raise ValueError(f"Option {option_name} not found")
 
             return callback
 
@@ -103,7 +173,7 @@ class ContextMenu(InteractionCommand):
 def slash_command(
     name: str,
     description: str = None,
-    options: list[Option] = None,
+    options: list[SlashOption] = None,
     default_permission: bool = True,
     **kwargs
 ) -> Callable:
@@ -124,11 +194,12 @@ def slash_command(
 
 def slash_option(
     name: str,
+    description: str,
     type: OptionType,
     min_value: Optional[int | float] = None,
     max_value: Optional[int | float] = None,
     choices: Optional[list[Choice]] = None,
-    options: Optional[list['Option']] = None,
+    options: Optional[list[SlashOption]] = None,
     channel_types: Optional[list[ChannelType]] = None,
     required: bool = False,
     autocomplete: bool = False,
@@ -137,11 +208,9 @@ def slash_option(
     Create a slash option
     """
     def wrapper(callback):
-        if not hasattr(callback, 'cmd_id'):
-            raise Exception('Callback must be a SlashCommand')
-
-        option = Option(
+        option = SlashOption(
             name=name,
+            description=description,
             type=type,
             min_value=min_value,
             max_value=max_value,
@@ -219,14 +288,82 @@ def user_command(
     
     return wrapper
 
-def listen(event_name: str) -> Callable:
+def listen(event_name: str = None) -> Callable:
     """
     Create a listener
     """
     def wrapper(callback):
         return Listener(
-            event_name=event_name,
+            event_name=event_name or callback.__name__,
             callback=callback
+        )
+    
+    return wrapper
+
+def component_callback(
+    custom_id: str,
+    type: ComponentType,
+    **kwargs
+) -> Callable:
+    """
+    Create a component callback
+    """
+    def wrapper(callback):
+        return ComponentCallback(
+            custom_id=custom_id,
+            callback=callback,
+            type=type,
+            **kwargs
+        )
+    
+    return wrapper
+
+def select_callback(
+    custom_id: str,
+    **kwargs
+) -> Callable:
+    """
+    Create a select callback
+    """
+    def wrapper(callback):
+        return ComponentCallback(
+            custom_id=custom_id,
+            callback=callback,
+            type=ComponentType.SELECT,
+            **kwargs
+        )
+    
+    return wrapper
+
+def button_callback(
+    custom_id: str,
+    **kwargs
+) -> Callable:
+    """
+    Create a button callback
+    """
+    def wrapper(callback):
+        return ComponentCallback(
+            custom_id=custom_id,
+            callback=callback,
+            type=ComponentType.BUTTON,
+            **kwargs
+        )
+    
+    return wrapper
+
+def modal_callback(
+    custom_id: str,
+    **kwargs
+) -> Callable:
+    """
+    Create a modal callback
+    """
+    def wrapper(callback):
+        return ModalCallback(
+            custom_id=custom_id,
+            callback=callback,
+            **kwargs
         )
     
     return wrapper

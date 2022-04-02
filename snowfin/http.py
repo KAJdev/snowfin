@@ -4,9 +4,9 @@ import aiohttp
 import json
 import sanic
 from dataclasses import asdict
+from snowfin.decorators import SlashOption
 
 from snowfin.response import _DiscordResponse
-from snowfin.interaction import Option
 from snowfin.enums import CommandType
 
 from .errors import *
@@ -210,7 +210,7 @@ class HTTP:
         type: CommandType,
         name_localizations: Optional[dict] = None,
         description_localizations: Optional[dict] = None,
-        options: Optional[list[Union[dict, Option]]] = None,
+        options: Optional[list[Union[dict, SlashOption]]] = None,
         default_permission: bool = True,
         **kwargs
     ) -> Any:
@@ -228,7 +228,7 @@ class HTTP:
                 "type": type.value,
                 "name_localizations": name_localizations,
                 "description_localizations": description_localizations,
-                "options": [asdict(o) if isinstance(o, Option) else o for o in options],
+                "options": [asdict(o) if isinstance(o, SlashOption) else o for o in options],
                 "default_permission": default_permission
             }
             **kwargs
@@ -256,7 +256,7 @@ class HTTP:
         description: Optional[str] = None,
         name_localizations: Optional[dict] = None,
         description_localizations: Optional[dict] = None,
-        options: Optional[list[Union[dict, Option]]] = None,
+        options: Optional[list[Union[dict, SlashOption]]] = None,
         default_permission: Optional[bool] = None,
         **kwargs
     ) -> Any:
@@ -283,7 +283,7 @@ class HTTP:
             data['description_localizations'] = description_localizations
 
         if options is not None:
-            data['options'] = [asdict(o) if isinstance(o, Option) else o for o in options]
+            data['options'] = [asdict(o) if isinstance(o, SlashOption) else o for o in options]
 
         if default_permission is not None:
             data['default_permission'] = default_permission

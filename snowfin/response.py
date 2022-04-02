@@ -37,7 +37,7 @@ class _DiscordResponse(ABC):
 class AutocompleteResponse(_DiscordResponse):
     def __init__(
         self,
-        choices: List[Choice],
+        *choices: List[Choice],
         **kwargs
     ) -> None:
         super().__init__(ResponseType.AUTOCOMPLETE, choices=choices, **kwargs)
@@ -181,7 +181,7 @@ class ModalResponse(_DiscordResponse):
 
     def to_dict(self):
         return {
-            "type": self.type.value,
+            "type": ResponseType.MODAL.value,
             "data": {
                 "custom_id": self.custom_id,
                 "title": self.title,

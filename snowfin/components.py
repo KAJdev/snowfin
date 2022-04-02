@@ -1,6 +1,4 @@
 from typing import Union, List
-
-from .interaction import Option
 from .enums import ButtonStyle, ComponentType, TextStyleTypes
 
 __all__ = (
@@ -199,7 +197,7 @@ class TextInput:
         max_length: int = None,
     ) -> None:
         self.weight = 5
-        self.type = ComponentType.TEXT_INPUT
+        self.type = ComponentType.INPUT_TEXT
         self.custom_id = custom_id
         self.label = label
         self.style = style

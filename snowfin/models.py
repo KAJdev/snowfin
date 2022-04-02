@@ -42,7 +42,7 @@ class Member:
     deaf: bool
     mute: bool
     pending: Optional[bool]
-    permissions: Optional[str]
+    permissions: Optional[int]
     communication_disabled_until: Optional[str]
 
 @dataclass
@@ -60,56 +60,17 @@ class Role:
     icon: Optional[str]
     unicode_emoji: Optional[str]
     position: int
-    permissions: str
+    permissions: int
     managed: bool
     mentionable: bool
     tags: Optional[RoleTags]
-
-
-@dataclass
-class Option:
-    """
-    Discord command option
-    """
-    name: str
-    type: OptionType
-    description: str
-    min_value: Optional[Union[int, float]] = None
-    max_value: Optional[Union[int, float]] = None
-    choices: Optional[List[Choice]] = None
-    options: Optional[List['Option']] = None
-    channel_types: Optional[List[ChannelType]] = None
-    required: bool = False
-    autocomplete: bool = False
-
-    def to_dict(self):
-        d = {
-            'name': self.name,
-            'type': self.type.value if isinstance(self.type, OptionType) else self.type,
-            'description': self.description,
-            'min_value': self.min_value,
-            'max_value': self.max_value,
-            'required': self.required,
-            'autocomplete': self.autocomplete
-        }
-
-        if self.choices:
-            d['choices'] = [c.to_dict() for c in self.choices]
-
-        if self.options:
-            d['options'] = [o.to_dict() for o in self.options]
-
-        if self.channel_types:
-            d['channel_types'] = [c.value for c in self.channel_types]
-
-        return d
 
 @dataclass
 class Channel:
     id: int
     name: str
     type: ChannelType
-    permissions: str
+    permissions: int
     thread_metadata: Optional[Dict]
     parent_id: Optional[int]
 
@@ -118,10 +79,11 @@ class Component:
     """
     Discord command component
     """
-    custom_id: str
-    component_type: ComponentType
+    custom_id: Optional[str]
+    type: ComponentType
     values: Optional[List[str]] # for selects
     value: Optional[str] # for inputs
+    components: Optional[List['Component']] # for action rows
 
 @dataclass
 class Message:
@@ -164,6 +126,13 @@ class Resolved:
     messages: Optional[Dict[int, Message]]
 
 @dataclass
+class Option:
+    focused: bool
+    name: str
+    type: OptionType
+    value: Optional[Union[str, int, float]]
+
+@dataclass
 class Command:
     id: int
     name: str
@@ -178,11 +147,16 @@ class ContextCommand:
     resolved: Optional[Resolved]
 
 @dataclass
+class ModalSubmit:
+    custom_id: str
+    components: list[Component]
+
+@dataclass
 class Interaction:
     id: int
     application_id: int
     type: RequestType
-    data: Optional[Union[Command, Component, ContextCommand]]
+    data: Optional[Command | Component | ContextCommand | ModalSubmit]
     guild_id: Optional[int]
     channel_id: Optional[int]
     member: Optional[Member]
@@ -190,6 +164,8 @@ class Interaction:
     token: str
     version: int
     message: Optional[Message]
+    local: Optional[str]
+    guild_local: Optional[str]
 
     # added later
     client: Optional[Any]
@@ -197,4 +173,4 @@ class Interaction:
     responded: bool = False
 
     def __post_init__(self):
-        self.author = self.user if self.user else self.member
+        self.author = self.member if self.member else self.user
