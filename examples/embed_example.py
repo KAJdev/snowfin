@@ -1,12 +1,12 @@
 import snowfin
+from snowfin.models import Interaction
 from snowfin.response import MessageResponse
 from snowfin.embed import Embed
 
-bot = snowfin.Client('public_key')
-
+bot = snowfin.Client('public_key', 'application_id', 'token', auto_defer=True)
 
 @snowfin.slash_command(name="hello")
-async def on_slash(interaction):
+async def on_slash(context: Interaction):
     return MessageResponse(embed=Embed(
         title="Embed Title",
         description="Embed Description",
