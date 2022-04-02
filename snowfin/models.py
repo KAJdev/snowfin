@@ -1,9 +1,9 @@
 from dataclasses import dataclass, field
-from lib2to3.pgen2.token import OP
-from re import S
+from datetime import datetime
+from dacite import from_dict, config
 from typing import Any, Dict, List, Optional, Union
 
-from .enums import ChannelType, OptionType, CommandType, ComponentType, RequestType
+from .enums import ChannelType, OptionType, CommandType, ComponentType, Permissions, RequestType
 from .embed import Embed
 
 @dataclass
@@ -39,11 +39,24 @@ class Member:
     roles: list[int]
     joined_at: Optional[str]
     premium_since: Optional[str]
-    deaf: bool
-    mute: bool
+    deaf: Optional[bool]
+    mute: Optional[bool]
     pending: Optional[bool]
     permissions: Optional[int]
     communication_disabled_until: Optional[str]
+
+    def __post_init__(self):
+        if self.joined_at:
+            # get datetime from ISO8601 string
+            self.joined_at = datetime.strptime(self.joined_at, '%Y-%m-%dT%H:%M:%S.%f+00:00')
+
+        if self.premium_since:
+            # get datetime from ISO8601 string
+            self.premium_since = datetime.strptime(self.premium_since, '%Y-%m-%dT%H:%M:%S.%f+00:00')
+
+        if self.communication_disabled_until:
+            # get datetime from ISO8601 string
+            self.communication_disabled_until = datetime.strptime(self.communication_disabled_until, '%Y-%m-%dT%H:%M:%S.%f+00:00')
 
 @dataclass
 class RoleTags:
@@ -119,15 +132,37 @@ class Message:
 
 @dataclass
 class Resolved:
-    users: Optional[Dict[int, User]]
-    members: Optional[Dict[int, Member]]
-    roles: Optional[Dict[int, Role]]
-    channels: Optional[Dict[int, Channel]]
-    messages: Optional[Dict[int, Message]]
+    users: Dict[str, User] = field(default_factory=dict)
+    members: Dict[str, Member] = field(default_factory=dict)
+    roles: Dict[str, Role] = field(default_factory=dict)
+    channels: Dict[str, Channel] = field(default_factory=dict)
+    messages: Dict[str, Message] = field(default_factory=dict)
+
+    def get(self, type: OptionType, key: str | int) -> Any:
+        key = str(key)
+        if type is OptionType.USER:
+            gotten = self.members.get(key, self.users.get(key))
+
+            if isinstance(gotten, Member):
+                gotten.user = self.users.get(key) or gotten.user
+
+            return gotten
+
+        elif type is OptionType.ROLE:
+            return self.roles.get(key)
+        elif type is OptionType.CHANNEL:
+            return self.channels.get(key)
+        elif type is OptionType.MENTIONABLE:
+            gotten = self.members.get(key, self.users.get(key, self.roles.get(key)))
+
+            if isinstance(gotten, Member):
+                gotten.user = self.users.get(key) or gotten.user
+
+            return gotten
 
 @dataclass
 class Option:
-    focused: bool
+    focused: Optional[bool]
     name: str
     type: OptionType
     value: Optional[Union[str, int, float]]
@@ -142,11 +177,6 @@ class Command:
     options: List[Option] = field(default_factory=list)
 
 @dataclass
-class ContextCommand:
-    target_id: int
-    resolved: Optional[Resolved]
-
-@dataclass
 class ModalSubmit:
     custom_id: str
     components: list[Component]
@@ -156,7 +186,7 @@ class Interaction:
     id: int
     application_id: int
     type: RequestType
-    data: Optional[Command | Component | ContextCommand | ModalSubmit]
+    data: Optional[dict]
     guild_id: Optional[int]
     channel_id: Optional[int]
     member: Optional[Member]
@@ -169,8 +199,28 @@ class Interaction:
 
     # added later
     client: Optional[Any]
-    author: Optional[dict]
     responded: bool = False
 
-    def __post_init__(self):
-        self.author = self.member if self.member else self.user
+    def __post_init__(self) -> None:
+        _config=config.Config(cast=[
+            int,
+            ChannelType,
+            CommandType,
+            OptionType,
+            ComponentType,
+            RequestType,
+            Permissions
+        ])
+
+        if self.type in (RequestType.APPLICATION_COMMAND, RequestType.APPLICATION_COMMAND_AUTOCOMPLETE):
+            self.data = from_dict(Command, self.data, config=_config)
+        elif self.type is RequestType.MESSAGE_COMPONENT:
+            self.data = from_dict(Component, self.data, config=_config)
+        elif self.type is RequestType.MODAL_SUBMIT:
+            self.data = from_dict(ModalSubmit, self.data, config=_config)
+        else:
+            raise ValueError(f'Unknown request type: {self.type}')
+
+    @property
+    def author(self) -> Member | User:
+        return self.member if self.member else self.user

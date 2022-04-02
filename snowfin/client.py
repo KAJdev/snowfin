@@ -1,7 +1,9 @@
+from ast import arg
 import asyncio
 from contextlib import suppress
 from contextvars import Context
 from dataclasses import dataclass
+import dataclasses
 import importlib
 import inspect
 import sys
@@ -19,7 +21,7 @@ from nacl.exceptions import BadSignatureError
 from dacite import from_dict, config
 from snowfin.errors import CogLoadError
 
-import snowfin.models
+from snowfin.models import *
 from .decorators import InteractionCommand
 from .response import _DiscordResponse, DeferredResponse
 from .http import *
@@ -131,7 +133,7 @@ class Client:
 
             request.ctx = from_dict(
                 data= request.json,
-                data_class=snowfin.models.Interaction,
+                data_class=Interaction,
                 config=config.Config(
                     cast=[
                         int,
@@ -203,15 +205,16 @@ class Client:
 
             if cmd := self.get_command(request.ctx.data.name):
                 kwargs = {}
-                for argument,type in cmd.callback.__annotations__.items():
-                    if argument in ('self', 'ctx', 'context'):
-                        continue
 
-                    if option := next(filter(lambda x: x.name == argument, request.ctx.data.options), None):
-                        with suppress(Exception):
-                            option = type(option.value)
+                for option in request.ctx.data.options:
 
-                        kwargs[argument] = option
+                    converted = option.value
+                    if option.type in (OptionType.CHANNEL, OptionType.USER, OptionType.ROLE, OptionType.MENTIONABLE):
+                        converted = request.ctx.data.resolved.get(option.type, option.value)
+                    else:
+                        converted = type(option.value)
+
+                    kwargs[option.name] = converted
                         
 
                 func = partial(cmd.callback, request.ctx, **kwargs)
@@ -239,7 +242,7 @@ class Client:
             if modal := self.modals.get(request.ctx.data.custom_id):
                 func = partial(modal, request.ctx)
 
-        print(f"getting callback for {request.ctx.type}: found {func}")
+        print(f"getting callback for {request.ctx.type}: found {func.func.__name__}{func.args[1:]}")
 
         if func:
             task = asyncio.create_task(func())
