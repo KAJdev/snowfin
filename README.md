@@ -15,14 +15,19 @@ py -m pip install git+https://github.com/kajdev/snowfin
 
 ### Simple slash command
 ```python
+import asyncio
 import snowfin
+from snowfin.client import AutoDefer
+from snowfin.models import Interaction
 from snowfin.response import MessageResponse
 
-bot = snowfin.Client('public_key')
+bot = snowfin.Client('public_key', 'application_id', 'token', auto_defer=AutoDefer(enabled=True, timeout=0, ephemeral=True))
 
 @snowfin.slash_command(name="hello")
-async def on_slash(request):
-    return MessageResponse('world')
+async def hello(context: Interaction):
+    # we don't have to do anything, just don't return a response until we need to
+    await asyncio.sleep(10)
+    return MessageResponse('Ok, *Now* I want to respond ;)')
 
 bot.run("0.0.0.0", 80, debug=True)
 ```
@@ -31,15 +36,16 @@ bot.run("0.0.0.0", 80, debug=True)
 ```python
 import asyncio
 import snowfin
+from snowfin.models import Interaction
 from snowfin.response import DeferredResponse, MessageResponse
 
-bot = snowfin.Client('public_key')
+bot = snowfin.Client('public_key', 'application_id', 'token', auto_defer=True)
 
 @snowfin.slash_command(name="hello")
-async def on_slash(request):
+async def on_slash(context: Interaction):
     return DeferredResponse(on_slash_defer)
 
-async def on_slash_defer(request):
+async def on_slash_defer(context: Interaction):
     await asyncio.sleep(1)
     return MessageResponse('Ok, *Now* I want to respond ;)')
 
