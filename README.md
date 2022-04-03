@@ -52,6 +52,8 @@ async def on_slash_defer(context: Interaction):
 bot.run("0.0.0.0", 80, debug=True)
 ```
 
+you can see more examples in [/examples](https://github.com/KAJdev/snowfin/tree/main/examples)
+
 ## Links
 
 - Library Docs (Coming Soon)
