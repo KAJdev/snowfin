@@ -199,12 +199,61 @@ class Client:
         response = await after()
 
         if response:
+            if not isinstance(response, (_DiscordResponse, HTTPResponse)):
+                response = self.infer_response(response)
+                
             if response.type is ResponseType.SEND_MESSAGE:
                 await self.http.send_followup(request, response)
             elif response.type is ResponseType.EDIT_ORIGINAL_MESSAGE:
                 await self.http.edit_original_message(request, response)
             else:
                 raise Exception("Invalid response type")
+
+    def infer_response(self, resp: Any) -> _DiscordResponse:
+        kwargs = {}
+        chosen_type = None
+
+        if not isinstance(resp, tuple):
+            resp = [resp]
+            
+        for arg in resp:
+            if isinstance(arg, ResponseType):
+                kwargs['type'] = arg
+
+            elif isinstance(arg, Embed):
+                print(arg)
+                kwargs.setdefault('embeds', []).append(arg)
+                chosen_type = chosen_type or MessageResponse
+
+            elif is_component(arg):
+                kwargs.setdefault('components', Components()).add_component(arg)
+                chosen_type = chosen_type or (ModalResponse if isinstance(arg, TextInput) else MessageResponse)
+
+            elif isinstance(arg, Components):
+                kwargs['components'] = arg
+
+                for row in arg.rows:
+                    for component in row.components:
+                        if isinstance(component, TextInput):
+                            chosen_type = chosen_type or ModalResponse
+                            break
+                else:
+                    chosen_type = chosen_type or MessageResponse
+
+            elif isinstance(arg, str):
+                kwargs['content'] = arg
+                chosen_type = chosen_type or MessageResponse
+
+            elif isinstance(arg, list):
+                kwargs.setdefault('choices', []).extend(arg)
+                chosen_type = chosen_type or AutocompleteResponse
+
+            elif isinstance(arg, dict):
+                kwargs.update(arg)
+            else:
+                raise ValueError(f"Invalid response type {arg}")
+
+        return (chosen_type or MessageResponse)(**kwargs)
 
     async def _handle_request(self, request: Request) -> HTTPResponse:
         """
@@ -251,7 +300,7 @@ class Client:
         elif request.ctx.type is RequestType.MESSAGE_COMPONENT:
             self.dispatch('component', request.ctx)
 
-            if component := self.components.get((request.ctx.data.custom_id, request.ctx.data.type)):
+            if component := self.components.get((request.ctx.data.custom_id, request.ctx.data.component_type)):
                 func = partial(component, request.ctx)
 
                 if component.after_callback:
@@ -266,7 +315,7 @@ class Client:
                 if modal.after_callback:
                     after = partial(modal.after_callback, request.ctx)
 
-        if self.app.debug: self.log(f"getting callback for {request.ctx.type}: found {func.func.__name__}{func.args[1:]}")
+        if self.app.debug: self.log(f"getting callback for {request.ctx.type}: found", f"{getattr(func.func, '__name__', request.ctx.data.custom_id)}{func.args[1:]}" if func else None)
 
         if func:
             task = asyncio.create_task(func())
@@ -300,39 +349,7 @@ class Client:
             request.ctx.responded = True
 
         if not isinstance(resp, (_DiscordResponse, HTTPResponse)):
-            kwargs = {}
-            chosen_type = None
-
-            if not isinstance(resp, tuple):
-                resp = [resp]
-                
-            for arg in resp:
-                if isinstance(arg, ResponseType):
-                    kwargs['type'] = arg
-
-                elif isinstance(arg, Embed):
-                    print(arg)
-                    kwargs.setdefault('embeds', []).append(arg)
-                    chosen_type = chosen_type or MessageResponse
-
-                elif is_component(arg):
-                    kwargs.setdefault('components', Components()).add_component(arg)
-                    chosen_type = chosen_type or ModalResponse if isinstance(arg, TextInput) else MessageResponse
-
-                elif isinstance(arg, str):
-                    kwargs['content'] = arg
-                    chosen_type = chosen_type or MessageResponse
-
-                elif isinstance(arg, list):
-                    kwargs.setdefault('choices', []).extend(arg)
-                    chosen_type = chosen_type or AutocompleteResponse
-
-                elif isinstance(arg, dict):
-                    kwargs.update(arg)
-                else:
-                    raise ValueError(f"Invalid response type {arg}")
-
-            resp = (chosen_type or MessageResponse)(**kwargs)
+            resp = self.infer_response(resp)
 
         if isinstance(resp, _DiscordResponse):
             if isinstance(resp, DeferredResponse):
@@ -355,7 +372,7 @@ class Client:
             
             # do some logging and return the 'dictified' data
             data = resp.to_dict()
-            if self.app.debug: self.log(f"RESPONDING {request.ctx.type} `{request.ctx.data.name}`", data)
+            if self.app.debug: self.log(f"RESPONDING {request.ctx.type} `{getattr(request.ctx.data, 'name', None)}`", data)
             return json(data)
 
         elif isinstance(resp, HTTPResponse):
