@@ -58,14 +58,15 @@ class Button:
         disabled: bool = False,
         style: ButtonStyle = ButtonStyle.PRIMARY,
         emoji: Union[str, Emoji] = None,
-        url: str = None
+        url: str = None,
+        **kwargs
     ) -> None:
         self.weight = 1
         self.type = ComponentType.BUTTON
         self.label = label
         self.custom_id = custom_id
         self.disabled = disabled
-        self.style = style
+        self.style = ButtonStyle(style)
 
         if isinstance(emoji, str):
             self.emoji = Emoji.from_str(emoji)
@@ -110,6 +111,8 @@ class SelectOption:
 
         if isinstance(emoji, str):
             self.emoji = Emoji.from_str(emoji)
+        elif isinstance(emoji, dict):
+            self.emoji = Emoji(**emoji)
         else:
             self.emoji = emoji
 
@@ -136,6 +139,7 @@ class Select:
         options: List[SelectOption] = None,
         min_values: int = 1,
         max_values: int = 1,
+        **kwargs
     ) -> None:
         self.weight = 5
         self.type = ComponentType.SELECT
@@ -147,7 +151,7 @@ class Select:
             raise ValueError("Select requires at least one option")
         elif len(options) > 25:
             raise ValueError("Select cannot have more than 25 options")
-        self.options = options
+        self.options = [SelectOption(**x) if not isinstance(x, SelectOption) else x for x in options]
 
         self.min_values = min_values
         self.max_values = max_values
@@ -197,12 +201,13 @@ class TextInput:
         placeholder: str = None,
         min_length: int = None,
         max_length: int = None,
+        **kwargs
     ) -> None:
         self.weight = 5
         self.type = ComponentType.INPUT_TEXT
         self.custom_id = custom_id
         self.label = label
-        self.style = style
+        self.style = TextStyleTypes(style)
         self.placeholder = placeholder
         self.min_length = min_length
         self.max_length = max_length
@@ -280,6 +285,18 @@ class Components:
                 return self
             raise ValueError("Cannot add component, weight limit exceeded")
 
+    def add_component_raw(self, component: dict, row: int = None):
+        if component.get('type') == ComponentType.BUTTON.value:
+            component = Button(**component)
+        elif component.get('type') == ComponentType.SELECT.value:
+            component = Select(**component)
+        elif component.get('type') == ComponentType.INPUT_TEXT.value:
+            component = TextInput(**component)
+        else:
+            raise ValueError("Component type not supported")
+
+        return self.add_component(component, row)
+
     def replace_component(self, component: Union[Button, Select, str], new_component: Union[Button, Select]):
         if isinstance(component, str):
             for row in self.rows:
@@ -320,6 +337,15 @@ class Components:
             if row.weights > 0:
                 data.append(row.to_dict())
         return data
+
+    @classmethod
+    def from_list(cls, data: list[dict]):
+        components = cls()
+        for row,action_row in enumerate(data):
+            for component in action_row.get('components', []):
+                components.add_component_raw(component, row)
+            
+        return components
 
 def is_component(obj) -> bool:
     return isinstance(obj, (Button, Select, TextInput))
