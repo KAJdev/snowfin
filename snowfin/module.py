@@ -27,6 +27,7 @@ class Module:
         new_cls.http = client.http
 
         new_cls.callbacks = []
+        new_cls.description = cls.description or cls.__doc__
 
         for _name, val in inspect.getmembers(
             new_cls, predicate=lambda x: isinstance(x, Interactable)
