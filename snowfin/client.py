@@ -23,7 +23,8 @@ from snowfin.components import Components, TextInput, is_component
 from snowfin.errors import CogLoadError
 
 from snowfin.models import *
-from .decorators import InteractionCommand
+from snowfin.module import Module
+from .decorators import Interactable, InteractionCommand
 from .response import _DiscordResponse, AutocompleteResponse, DeferredResponse, MessageResponse, ModalResponse
 from .http import *
 from .decorators import *
@@ -44,7 +45,17 @@ class AutoDefer:
 
 class Client:
 
-    def __init__(self, verify_key: str, application_id: int, sync_commands: bool = False, token: str = None, auto_defer: AutoDefer | bool = AutoDefer(), app: Sanic = None, logging_level: int = 1, **kwargs):
+    def __init__(
+        self,
+        verify_key: str,
+        application_id: int,
+        sync_commands: bool = False,
+        token: str = None,
+        auto_defer: AutoDefer | bool = AutoDefer(),
+        app: Sanic = None,
+        logging_level: int = 1,
+        **kwargs
+    ):
         # create a new app if none is not supplied
         if app is None:
             self.app = Sanic("snowfin-interactions")
@@ -71,7 +82,7 @@ class Client:
             headers=kwargs.get('headers', None),
         )
 
-        self.__loaded_cogs = {}
+        self.modules = {}
 
         # listeners for events (read only events)
         self._listeners: dict[str, list] = {}
@@ -87,26 +98,7 @@ class Client:
         # create some middleware for start and stop events
         @self.app.listener('after_server_start')
         async def on_start(app, loop):
-            if self.sync_commands:
-
-                type_classes = {
-                    CommandType.CHAT_INPUT.value: SlashCommand,
-                    CommandType.MESSAGE.value: ContextMenu,
-                    CommandType.USER.value: ContextMenu
-                }
-
-                current_commands = [
-                    from_dict(data=cmd, data_class=type_classes.get(cmd.get('type')))
-                    for cmd in await self.http.get_global_application_commands()
-                ]
-
-                if [x.to_dict() for x in current_commands] != [x.to_dict() for x in self.commands]:
-                    self.log(f"syncing {len(self.commands)} commands")
-                    await self.http.bulk_overwrite_global_application_commands(
-                        [command.to_dict() for command in self.commands]
-                    )
-                    self.log(f"synced {len(self.commands)} commands")
-
+            await self._sync_commands()
             self.dispatch('start')
 
         @self.app.listener('before_server_stop')
@@ -164,6 +156,26 @@ class Client:
             return self.app.loop
         except sanic.exceptions.SanicException:
             return None
+    
+    async def _sync_commands(self):
+        if self.sync_commands:
+            type_classes = {
+                CommandType.CHAT_INPUT.value: SlashCommand,
+                CommandType.MESSAGE.value: ContextMenu,
+                CommandType.USER.value: ContextMenu
+            }
+
+            current_commands = [
+                from_dict(data=cmd, data_class=type_classes.get(cmd.get('type')))
+                for cmd in await self.http.get_global_application_commands()
+            ]
+
+            if [x.to_dict() for x in current_commands] != [x.to_dict() for x in self.commands]:
+                self.log(f"syncing {len(self.commands)} commands")
+                await self.http.bulk_overwrite_global_application_commands(
+                    [command.to_dict() for command in self.commands]
+                )
+                self.log(f"synced {len(self.commands)} commands")
 
     def _handle_deferred_routine(self, routine: asyncio.Task, request, after: Optional[Callable]):
         """
@@ -201,7 +213,7 @@ class Client:
         if response:
             if not isinstance(response, (_DiscordResponse, HTTPResponse)):
                 response = self.infer_response(response)
-                
+
             if response.type is ResponseType.SEND_MESSAGE:
                 await self.http.send_followup(request, response)
             elif response.type is ResponseType.EDIT_ORIGINAL_MESSAGE:
@@ -221,7 +233,6 @@ class Client:
                 kwargs['type'] = arg
 
             elif isinstance(arg, Embed):
-                print(arg)
                 kwargs.setdefault('embeds', []).append(arg)
                 chosen_type = chosen_type or MessageResponse
 
@@ -315,7 +326,7 @@ class Client:
                 if modal.after_callback:
                     after = partial(modal.after_callback, request.ctx)
 
-        if self.app.debug: self.log(f"getting callback for {request.ctx.type}: found", f"{getattr(func.func, '__name__', request.ctx.data.custom_id)}{func.args[1:]}" if func else None)
+        if self.app.debug: self.log(f"getting callback for {request.ctx.type}: found", f"{func.func.__name__}{func.args[1:]}" if func else None)
 
         if func:
             task = asyncio.create_task(func())
@@ -383,53 +394,63 @@ class Client:
     def run(self, host: str, port: int, **kwargs):
         self.app.run(host=host, port=port, access_log=False, **kwargs)
 
-    def add_cog(self, module_name: str):
+    def load_module(self, module_name: str):
         resolved_name = importlib.util.resolve_name(module_name, __spec__.parent)
 
-        if resolved_name in self.__loaded_cogs:
+        if resolved_name in self.modules:
             raise CogLoadError(f"{module_name} already loaded")
 
         try:
             module = importlib.import_module(module_name)
         except Exception as e:
             raise CogLoadError(f"{module_name} failed to load: {e}")
-        self.__loaded_cogs[resolved_name] = module
-        if hasattr(module, "setup"):
-            module.setup(self)
+        self.modules[resolved_name] = []
+        
+        # go through every class that inherits from Module
+        for cls in inspect.getmembers(module, inspect.isclass):
+            if issubclass(cls[1], Module) and cls[1].enabled and cls[1] != Module:
+                new_module = cls[1](self)
+                self.modules[resolved_name].append(new_module)
 
-    def remove_cog(self, module: str):
+                if hasattr(new_module, 'on_load'):
+                    new_module.on_load()
+                
+    def unload_module(self, module: str):
         module_name = importlib.util.resolve_name(module, __spec__.parent)
         
-        if module_name not in self.__loaded_cogs:
+        if module_name not in self.modules:
             raise ValueError(f"{module_name} not loaded")
 
-        module_ = self.__loaded_cogs.pop(module_name)
+        modules: list[Module] = self.modules.pop(module_name)
 
-        if hasattr(module_, "teardown"):
-            module_.teardown(self)
+        for module in modules:
+            if hasattr(module, "on_unload"):
+                module.on_unload()
+
+            # unload all callbacks
+            for callback in module.callbacks:
+                self.remove_callback(callback)
+
+            del module
+
+    def _ingest_callbacks(self, *callbacks: Interactable):
+        for func in callbacks:
+            if isinstance(func, InteractionCommand):
+                self.add_interaction_command(func)
+            elif isinstance(func, Listener):
+                self.add_listener(func)
+            elif isinstance(func, ComponentCallback):
+                self.add_component_callback(func)
+            elif isinstance(func, ModalCallback):
+                self.add_modal_callback(func)
 
     def _gather_callbacks(self) -> None:
         """
         Gather all callbacks from loaded modules
         """
-
-        def process(_cmds) -> None:
-
-            for func in _cmds:
-                if isinstance(func, InteractionCommand):
-                    self.add_interaction_command(func)
-                elif isinstance(func, Listener):
-                    self.add_listener(func)
-                elif isinstance(func, ComponentCallback):
-                    self.add_component_callback(func)
-                elif isinstance(func, ModalCallback):
-                    self.add_modal_callback(func)
-
-            self.log(f"Loaded {len(_cmds)} callbacks")
-
-        process(
-            [obj for _, obj in inspect.getmembers(sys.modules["__main__"]) + inspect.getmembers(self) if isinstance(obj, (InteractionCommand, Listener, ComponentCallback, ModalCallback))]
-        )
+        callbacks = [obj for _, obj in inspect.getmembers(sys.modules["__main__"]) + inspect.getmembers(self) if isinstance(obj, Interactable)]
+        self._ingest_callbacks(*callbacks)
+        self.log(f"Loaded {len(callbacks)} callbacks")
 
     def add_interaction_command(self, command: InteractionCommand):
         """
@@ -487,3 +508,16 @@ class Client:
         for command in self.commands:
             if command.name == name:
                 return command
+
+    def remove_callback(self, callback: Interactable):
+        """
+        Remove a callback from the client
+        """
+        if isinstance(callback, InteractionCommand):
+            self.commands.remove(callback)
+        elif isinstance(callback, Listener):
+            self._listeners.get(callback.event_name, []).remove(callback)
+        elif isinstance(callback, ComponentCallback):
+            self.components.pop((callback.custom_id, callback.type))
+        elif isinstance(callback, ModalCallback):
+            self.modals.pop(callback.custom_id)

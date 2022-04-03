@@ -20,5 +20,6 @@ from .errors import *
 from .color import *
 from .enums import *
 from .components import *
+from .module import *
 
 # hi mom
