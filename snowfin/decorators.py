@@ -181,10 +181,13 @@ def slash_command(
     Create a slash command
     """
     def wrapper(callback):
+        if not asyncio.iscoroutinefunction(callback):
+            raise ValueError("Commands must be coroutines")
+
         return SlashCommand(
             name=name,
-            description=description or callback.__doc__,
-            options=options,
+            description=description or callback.__doc__ or "No Description Set",
+            options=options or [],
             default_permission=default_permission,
             callback=callback,
             **kwargs
@@ -208,6 +211,9 @@ def slash_option(
     Create a slash option
     """
     def wrapper(callback):
+        if not asyncio.iscoroutinefunction(callback):
+            raise ValueError("Commands must be coroutines")
+
         option = SlashOption(
             name=name,
             description=description,
@@ -221,10 +227,9 @@ def slash_option(
             autocomplete=autocomplete,
         )
 
-        if hasattr(callback, 'options'):
-            if not callback.options:
-                callback.options = []
-            callback.options.append(option)
+        if not hasattr(callback, 'options'):
+            callback.options = []
+        callback.options.insert(0, option)
 
         return callback
     
@@ -240,6 +245,9 @@ def context_menu(
     Create a context menu
     """
     def wrapper(callback):
+        if not asyncio.iscoroutinefunction(callback):
+            raise ValueError("Commands must be coroutines")
+
         return ContextMenu(
             name=name,
             type=type,
@@ -259,6 +267,9 @@ def message_command(
     Create a message command
     """
     def wrapper(callback):
+        if not asyncio.iscoroutinefunction(callback):
+            raise ValueError("Commands must be coroutines")
+
         return ContextMenu(
             name=name,
             type=CommandType.MESSAGE,
@@ -278,6 +289,9 @@ def user_command(
     Create a user command
     """
     def wrapper(callback):
+        if not asyncio.iscoroutinefunction(callback):
+            raise ValueError("Commands must be coroutines")
+
         return ContextMenu(
             name=name,
             type=CommandType.USER,
@@ -293,6 +307,9 @@ def listen(event_name: str = None) -> Callable:
     Create a listener
     """
     def wrapper(callback):
+        if not asyncio.iscoroutinefunction(callback):
+            raise ValueError("Listeners must be coroutines")
+
         return Listener(
             event_name=event_name or callback.__name__,
             callback=callback
@@ -309,6 +326,9 @@ def component_callback(
     Create a component callback
     """
     def wrapper(callback):
+        if not asyncio.iscoroutinefunction(callback):
+            raise ValueError("Callbacks must be coroutines")
+
         return ComponentCallback(
             custom_id=custom_id,
             callback=callback,
@@ -326,6 +346,9 @@ def select_callback(
     Create a select callback
     """
     def wrapper(callback):
+        if not asyncio.iscoroutinefunction(callback):
+            raise ValueError("Callbacks must be coroutines")
+
         return ComponentCallback(
             custom_id=custom_id,
             callback=callback,
@@ -343,6 +366,9 @@ def button_callback(
     Create a button callback
     """
     def wrapper(callback):
+        if not asyncio.iscoroutinefunction(callback):
+            raise ValueError("Callbacks must be coroutines")
+
         return ComponentCallback(
             custom_id=custom_id,
             callback=callback,
@@ -360,6 +386,9 @@ def modal_callback(
     Create a modal callback
     """
     def wrapper(callback):
+        if not asyncio.iscoroutinefunction(callback):
+            raise ValueError("Callbacks must be coroutines")
+
         return ModalCallback(
             custom_id=custom_id,
             callback=callback,
