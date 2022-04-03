@@ -143,7 +143,7 @@ class MessageResponse(_DiscordResponse):
 
 class EditResponse(MessageResponse):
     def __init__(self, *args, **kwargs) -> None:
-        kwargs['type'] = ResponseType.UPDATE_MESSAGE
+        kwargs['type'] = ResponseType.EDIT_ORIGINAL_MESSAGE
         if 'ephemeral' in kwargs:
             del kwargs['ephemeral']
         super().__init__(**kwargs)

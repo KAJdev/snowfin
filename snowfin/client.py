@@ -59,8 +59,8 @@ class Client:
 
         self.sync_commands = sync_commands
 
-        self.log = lambda msg: logger.info(msg)
-        self.log_error = lambda msg: logger.error(msg)
+        self.log = lambda *msgs: logger.info(' '.join(str(msg) for msg in msgs))
+        self.log_error = lambda *msgs: logger.error(' '.join(str(msg) for msg in msgs))
 
         self.http: HTTP = HTTP(
             application_id=application_id,
@@ -168,7 +168,7 @@ class Client:
         except sanic.exceptions.SanicException:
             return None
 
-    def _handle_deferred_routine(self, routine: asyncio.Task, request):
+    def _handle_deferred_routine(self, routine: asyncio.Task, request, after: Optional[Callable]):
         """
         Create a wrapper for the task supplied and wait on it.
         log any errors and pass the result onward
@@ -177,6 +177,10 @@ class Client:
             try:
                 response = await routine
                 await self._handle_deferred_response(request, response)
+
+                # call the after callback if it exists
+                if after:
+                    await self._handle_followup_response(request, after)
             except Exception as e:
                 logger.error(e.__repr__())
         asyncio.create_task(wrapper())
@@ -191,6 +195,20 @@ class Client:
             else:
                 raise Exception("Invalid response type")
 
+    async def _handle_followup_response(self, request, after):
+        """
+        Take the result of a followup and send a request to the interaction webhook
+        """
+        response = await after()
+
+        if response:
+            if response.type is ResponseType.SEND_MESSAGE:
+                await self.http.send_followup(request, response)
+            elif response.type is ResponseType.EDIT_ORIGINAL_MESSAGE:
+                await self.http.edit_original_message(request, response)
+            else:
+                raise Exception("Invalid response type")
+
     async def _handle_request(self, request: Request) -> HTTPResponse:
         """
         Grab the callback Coroutine and create a task.
@@ -199,6 +217,7 @@ class Client:
         self.dispatch('before_request', request.ctx)
 
         func: Optional[Callable] = None
+        after: Optional[Callable] = None
 
         if request.ctx.type is RequestType.APPLICATION_COMMAND:
             self.dispatch('command', request.ctx)
@@ -218,6 +237,8 @@ class Client:
                         
 
                 func = partial(cmd.callback, request.ctx, **kwargs)
+                if cmd.after_callback:
+                    after = partial(cmd.after_callback, request.ctx, **kwargs)
 
         elif request.ctx.type is RequestType.APPLICATION_COMMAND_AUTOCOMPLETE:
             self.dispatch('autocomplete', request.ctx)
@@ -236,13 +257,19 @@ class Client:
             if component := self.components.get((request.ctx.data.custom_id, request.ctx.data.type)):
                 func = partial(component, request.ctx)
 
+                if component.after_callback:
+                    after = partial(component.after_callback, request.ctx)
+
         elif request.ctx.type is RequestType.MODAL_SUBMIT:
             self.dispatch('modal', request.ctx)
 
             if modal := self.modals.get(request.ctx.data.custom_id):
                 func = partial(modal, request.ctx)
 
-        print(f"getting callback for {request.ctx.type}: found {func.func.__name__}{func.args[1:]}")
+                if modal.after_callback:
+                    after = partial(modal.after_callback, request.ctx)
+
+        if self.app.debug: self.log(f"getting callback for {request.ctx.type}: found {func.func.__name__}{func.args[1:]}")
 
         if func:
             task = asyncio.create_task(func())
@@ -288,11 +315,15 @@ class Client:
                     resp.task = asyncio.create_task(resp.task(self, request.ctx))
 
                 # start or continue the task and post the response to a webhook
-                self._handle_deferred_routine(resp.task, request)
+                self._handle_deferred_routine(resp.task, request, after)
+            else:
+                # launch after callbacks if there is any and the command is not a deferred one
+                if after:
+                    asyncio.create_task(self._handle_followup_response(request, after))
             
             # do some logging and return the 'dictified' data
             data = resp.to_dict()
-            if self.app.debug: self.log(data)
+            if self.app.debug: self.log(f"RESPONDING {request.ctx.type} `{request.ctx.data.name}`", data)
             return json(data)
 
         elif isinstance(resp, HTTPResponse):

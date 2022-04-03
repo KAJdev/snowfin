@@ -1,4 +1,4 @@
-from contextvars import Context
+import asyncio
 from dataclasses import dataclass, field, asdict
 from typing import Callable, Optional, Union
 
@@ -25,50 +25,52 @@ __all__ = (
 )
 
 @dataclass
-class InteractionCommand:
+class Interactable:
+    callback: Optional[Callable] = None
+
+    def __call__(self, context, *args, **kwargs):
+        return self.callback(context, *args, **kwargs)
+
+@dataclass
+class FollowupMixin:
+    after_callback: Optional[Callable] = None
+
+    def followup(self) -> Callable:
+        def wrapper(callback):
+            self.after_callback = callback
+            return callback
+
+        return wrapper
+
+@dataclass
+class InteractionCommand(Interactable, FollowupMixin):
     """
     Discord command
     """
-    name: str
-    callback: Optional[Callable]
-    default_permission: bool
-
-    def __call__(self, context, *args, **kwargs):
-        return self.callback(context, *args, **kwargs)
+    name: str = None
+    default_permission: bool = True
 
 @dataclass
-class ComponentCallback:
+class ComponentCallback(Interactable, FollowupMixin):
     """
     Discord component callback
     """
-    custom_id: str
-    callback: Callable
-    type: ComponentType
-
-    def __call__(self, context, *args, **kwargs):
-        return self.callback(context, *args, **kwargs)
+    custom_id: str = None
+    type: ComponentType = None
 
 @dataclass
-class ModalCallback:
+class ModalCallback(Interactable, FollowupMixin):
     """
     Discord modal callback
     """
-    custom_id: str
-    callback: Callable
-
-    def __call__(self, context, *args, **kwargs):
-        return self.callback(context, *args, **kwargs)
+    custom_id: str = None
 
 @dataclass
-class Listener:
+class Listener(Interactable):
     """
     Discord listener
     """
-    event_name: str
-    callback: Callable
-
-    def __call__(self, context, *args, **kwargs):
-        return self.callback(context, *args, **kwargs)
+    event_name: str = None
 
 @dataclass
 class SlashOption:
@@ -110,9 +112,7 @@ class SlashOption:
 
 @dataclass
 class SlashCommand(InteractionCommand):
-    cmd_id = None
-
-    name: str
+    name: str = None
     description: str = "No Description Set"
 
     options: list[SlashOption | dict] = field(default_factory=list)
@@ -161,7 +161,7 @@ class SlashCommand(InteractionCommand):
 
 @dataclass
 class ContextMenu(InteractionCommand):
-    type: CommandType
+    type: CommandType = None
 
     def to_dict(self):
         return {
