@@ -3,6 +3,8 @@ from datetime import datetime
 from dacite import from_dict, config
 from typing import Any, Dict, List, Optional, Union
 
+from snowfin.components import ActionRow, Components
+
 from .enums import ChannelType, OptionType, CommandType, ComponentType, Permissions, RequestType
 from .embed import Embed
 
@@ -93,10 +95,13 @@ class Component:
     Discord command component
     """
     custom_id: Optional[str]
-    type: ComponentType
+    component_type: Optional[ComponentType] # for when interaction data
+    type: Optional[OptionType] # for when in a message
     values: Optional[List[str]] # for selects
     value: Optional[str] # for inputs
+    label: Optional[str] # for inputs
     components: Optional[List['Component']] # for action rows
+    style: Optional[int] # for non action rows
 
 @dataclass
 class Message:
@@ -110,11 +115,11 @@ class Message:
     edited_timestamp: Optional[str]
     tts: bool
     mention_everyone: bool
-    mentions: list[User]
     mention_roles: list[int]
+    mentions: list[User]
     attachments: list[dict]
     embeds: list[Embed]
-    reactions: list[dict]
+    reactions: Optional[list[dict]]
     nonce: Optional[str | int]
     pinned: bool
     webhook_id: Optional[int]
@@ -126,9 +131,21 @@ class Message:
     referenced_message: Optional['Message']
     interaction: Optional[dict]
     thread: Optional[Channel]
-    components: Optional[list[Component]]
+    components: Optional[list[dict]]
     sticker_items: Optional[list[dict]]
     stickers: Optional[list[dict]]
+
+    def __post_init__(self):
+        if self.timestamp:
+            # get datetime from ISO8601 string
+            self.timestamp = datetime.strptime(self.timestamp, '%Y-%m-%dT%H:%M:%S.%f+00:00')
+
+        if self.edited_timestamp:
+            # get datetime from ISO8601 string
+            self.edited_timestamp = datetime.strptime(self.edited_timestamp, '%Y-%m-%dT%H:%M:%S.%f+00:00')
+
+        if self.components:
+            self.components = Components.from_list(self.components)
 
 @dataclass
 class Resolved:

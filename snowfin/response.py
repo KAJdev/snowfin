@@ -1,5 +1,5 @@
 from dataclasses import asdict
-from typing import Callable, Coroutine, List, Union, Iterable
+from typing import Callable, Coroutine, List, Optional, Union, Iterable
 from abc import ABC, abstractmethod
 import asyncio
 
@@ -76,13 +76,17 @@ class MessageResponse(_DiscordResponse):
         components: Components = MISSING,
         ephemeral: bool = False,
         type: ResponseType = ResponseType.SEND_MESSAGE,
+        *components_
     ) -> None:
         self.type = type
         self.content = content
         self.embed = embed
         self.embeds = embeds
-        self.components = components
+        self.components = components or Components()
         self.ephemeral = ephemeral
+
+        for component in components_:
+            self.add_component(component)
 
     def add_component(self, component: Union[Button, Select], row: int = None):
         if isinstance(component, TextInput):
@@ -156,11 +160,15 @@ class ModalResponse(_DiscordResponse):
         self,
         custom_id: str,
         title: str,
-        *components
+        *components_,
+        components: Optional[Components] = None,
     ) -> None:
         self.custom_id = custom_id
         self.title = title
-        self.components = Components(*components)
+        self.components = components or Components()
+
+        for component in components_:
+            self.add_component(component)
 
     def add_component(self, component: TextInput, row: int = None):
         if not isinstance(component, TextInput):
