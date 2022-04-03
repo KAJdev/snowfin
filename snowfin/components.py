@@ -8,8 +8,10 @@ __all__ = (
     'Select',
     'SelectOption',
     'ActionRow',
-    'TextInput'
+    'TextInput',
+    'is_component',
 )
+
 
 class Emoji:
     def __init__(self, name: str, id: int, animated: bool = False):
@@ -318,3 +320,6 @@ class Components:
             if row.weights > 0:
                 data.append(row.to_dict())
         return data
+
+def is_component(obj) -> bool:
+    return isinstance(obj, (Button, Select, TextInput))

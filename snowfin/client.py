@@ -19,11 +19,12 @@ from nacl.signing import VerifyKey
 from nacl.exceptions import BadSignatureError
 
 from dacite import from_dict, config
+from snowfin.components import Components, TextInput, is_component
 from snowfin.errors import CogLoadError
 
 from snowfin.models import *
 from .decorators import InteractionCommand
-from .response import _DiscordResponse, DeferredResponse
+from .response import _DiscordResponse, AutocompleteResponse, DeferredResponse, MessageResponse, ModalResponse
 from .http import *
 from .decorators import *
 from .enums import *
@@ -124,9 +125,11 @@ class Client:
             except BadSignatureError:
                 return json({"error": "invalid signature"}, status=403)
 
-        # middlware for constructing dataclasses from json
+        # send PONGs to PINGs and construct the interaction context
         @self.app.on_request
-        async def parse_request(request: Request):
+        async def ack_request(request: Request):
+            if request.json.get('type') == RequestType.PING.value:
+                return json({"type": 1})
 
             if self.app.debug:
                 self.log(f"{request.method} {request.path}\n\n{dumps(request.json, indent=2)}")
@@ -147,12 +150,6 @@ class Client:
             )
 
             request.ctx.client = self
-
-        # send PONGs to PINGs
-        @self.app.on_request
-        async def ack_request(request: Request):
-            if request.ctx.type == RequestType.PING:
-                return json({"type": 1})
 
         # handle user callbacks
         @self.app.post("/")
@@ -301,6 +298,41 @@ class Client:
 
         if not isinstance(resp, DeferredResponse):
             request.ctx.responded = True
+
+        if not isinstance(resp, (_DiscordResponse, HTTPResponse)):
+            kwargs = {}
+            chosen_type = None
+
+            if not isinstance(resp, tuple):
+                resp = [resp]
+                
+            for arg in resp:
+                if isinstance(arg, ResponseType):
+                    kwargs['type'] = arg
+
+                elif isinstance(arg, Embed):
+                    print(arg)
+                    kwargs.setdefault('embeds', []).append(arg)
+                    chosen_type = chosen_type or MessageResponse
+
+                elif is_component(arg):
+                    kwargs.setdefault('components', Components()).add_component(arg)
+                    chosen_type = chosen_type or ModalResponse if isinstance(arg, TextInput) else MessageResponse
+
+                elif isinstance(arg, str):
+                    kwargs['content'] = arg
+                    chosen_type = chosen_type or MessageResponse
+
+                elif isinstance(arg, list):
+                    kwargs.setdefault('choices', []).extend(arg)
+                    chosen_type = chosen_type or AutocompleteResponse
+
+                elif isinstance(arg, dict):
+                    kwargs.update(arg)
+                else:
+                    raise ValueError(f"Invalid response type {arg}")
+
+            resp = (chosen_type or MessageResponse)(**kwargs)
 
         if isinstance(resp, _DiscordResponse):
             if isinstance(resp, DeferredResponse):
