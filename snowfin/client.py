@@ -448,6 +448,16 @@ class Client:
 
             del module
 
+    def get_module(self, name: str) -> Option[Module]:
+        """
+        Get a loaded module by name
+        """
+
+        for modules in self.modules.values():
+            for module in modules:
+                if module.__class__.__name__ == name:
+                    return module
+
     def _ingest_callbacks(self, *callbacks: Interactable):
         for func in callbacks:
             if isinstance(func, InteractionCommand):
