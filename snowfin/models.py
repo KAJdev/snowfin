@@ -33,6 +33,10 @@ class User:
     premium_type: Optional[int]
     public_flags: Optional[int]
 
+    @property
+    def avatar_url(self) -> str:
+        return f"https://cdn.discordapp.com/avatars/{self.id}/{self.avatar}.png"
+
 @dataclass
 class Member:
     user: Optional[User]
@@ -59,6 +63,11 @@ class Member:
         if self.communication_disabled_until:
             # get datetime from ISO8601 string
             self.communication_disabled_until = datetime.strptime(self.communication_disabled_until, '%Y-%m-%dT%H:%M:%S.%f+00:00')
+
+    @property
+    def avatar_url(self) -> str:
+        if self.user is not None:
+            return f"https://cdn.discordapp.com/avatars/{self.user.id}/{self.avatar}.png"
 
 @dataclass
 class RoleTags:

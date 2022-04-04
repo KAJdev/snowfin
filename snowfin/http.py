@@ -1,3 +1,4 @@
+import asyncio
 from email.mime import application
 from typing import Any, Optional
 import aiohttp
@@ -31,6 +32,62 @@ class Route:
         for param,value in self.params.items():
             self.url = self.url.replace('{'+param+'}', str(value))
 
+class BucketLock:
+    """
+    A lock for each ratelimit bucket
+    """
+
+    def __init__(self) -> None:
+        self._lock: asyncio.Lock = asyncio.Lock()
+
+        self.unlock_on_exit: bool = True
+        self.limit: int = -1
+        self.remaining: int = -1
+        self.delta: float = 0.0
+
+    def __repr__(self) -> str:
+        return f"<BucketLock: {self.bucket_hash or 'Generic'}>"
+
+    @property
+    def locked(self) -> bool:
+        """Return True if lock is acquired."""
+        return self._lock.locked()
+
+    def unlock(self) -> None:
+        """Unlock this bucket."""
+        self._lock.release()
+
+    def ingest_ratelimit_header(self, header) -> None:
+        """
+        Ingests a discord rate limit header to configure this bucket lock.
+        Args:
+            header: A header from a http response
+        """
+        self.bucket_hash = header.get("x-ratelimit-bucket")
+        self.limit = int(header.get("x-ratelimit-limit") or -1)
+        self.remaining = int(header.get("x-ratelimit-remaining") or -1)
+        self.delta = float(header.get("x-ratelimit-reset-after", 0.0))
+
+    async def blind_defer_unlock(self) -> None:
+        """Unlocks the BucketLock but doesn't wait for completion."""
+        self.unlock_on_exit = False
+        loop = asyncio.get_running_loop()
+        loop.call_later(self.delta, self.unlock)
+
+    async def defer_unlock(self) -> None:
+        """Unlocks the BucketLock after a specified delay."""
+        self.unlock_on_exit = False
+        await asyncio.sleep(self.delta)
+        self.unlock()
+
+    async def __aenter__(self) -> None:
+        await self._lock.acquire()
+
+    async def __aexit__(self, *args) -> None:
+        if self.unlock_on_exit and self._lock.locked():
+            self.unlock()
+        self.unlock_on_exit = True
+
 class HTTP:
     """
     HTTP class
@@ -51,8 +108,19 @@ class HTTP:
             "User-Agent": "Snowfin (https://github.com/kajdev/snowfin)",
         }
 
+        self.locks = {}
+
         if headers is not None:
             self.headers.update(headers)
+
+    def get_bucket(self, bucket_hash: str) -> BucketLock:
+        """
+        Get a bucket lock
+        """
+        if bucket_hash not in self.locks:
+            self.locks[bucket_hash] = BucketLock()
+
+        return self.locks[bucket_hash]
 
     async def request(
         self,
@@ -98,6 +166,8 @@ class HTTP:
                 except KeyError:
                     pass
 
+                print(f"Got discord response ({response.status}): {response_data}")
+
                 if 300 > response.status >= 200:
                     return response_data
 
@@ -108,7 +178,6 @@ class HTTP:
                 elif response.status >= 500:
                     raise DiscordInternalError(response_data)
                 else:
-                    print(f"Unknown error: {response.status}")
                     raise HTTPException(response_data)
 
     async def close(self) -> None:
@@ -324,4 +393,19 @@ class HTTP:
             data=commands,
             **kwargs
         )
+
+    def fetch_user(
+        self,
+        user_id: int,
+        **kwargs
+    ) -> Any:
+        """
+        Fetch current user
+        """
+        r = Route('GET', '/users/{user_id}',
+            user_id = user_id,
+            auth=True
+        )
+
+        return self.request(r, **kwargs)
     

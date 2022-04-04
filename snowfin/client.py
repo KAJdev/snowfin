@@ -37,6 +37,17 @@ __all__ = (
     'AutoDefer',
 )
 
+cast_config=config.Config(
+    cast=[
+        int,
+        ChannelType,
+        CommandType,
+        OptionType,
+        ComponentType,
+        RequestType
+    ]
+)
+
 @dataclass
 class AutoDefer:
     enabled: bool = False
@@ -82,6 +93,8 @@ class Client:
             headers=kwargs.get('headers', None),
         )
 
+        self.user: User = None
+
         self.modules = {}
 
         # listeners for events (read only events)
@@ -100,6 +113,9 @@ class Client:
         async def on_start(app, loop):
             await self._sync_commands()
             self.dispatch('start')
+
+            if self.http.application_id:
+                self.user = await self.fetch_user(self.http.application_id)
 
         @self.app.listener('before_server_stop')
         async def on_stop(app, loop):
@@ -123,22 +139,13 @@ class Client:
             if request.json.get('type') == RequestType.PING.value:
                 return json({"type": 1})
 
-            if self.app.debug:
-                self.log(f"{request.method} {request.path}\n\n{dumps(request.json, indent=2)}")
+            # if self.app.debug:
+            #     self.log(f"{request.method} {request.path}\n\n{dumps(request.json, indent=2)}")
 
             request.ctx = from_dict(
                 data= request.json,
                 data_class=Interaction,
-                config=config.Config(
-                    cast=[
-                        int,
-                        ChannelType,
-                        CommandType,
-                        OptionType,
-                        ComponentType,
-                        RequestType
-                    ]
-                )
+                config=cast_config
             )
 
             request.ctx.client = self
@@ -166,16 +173,24 @@ class Client:
             }
 
             current_commands = [
-                from_dict(data=cmd, data_class=type_classes.get(cmd.get('type')))
+                from_dict(data=cmd, data_class=type_classes.get(cmd.get('type')), config=cast_config)
                 for cmd in await self.http.get_global_application_commands()
             ]
 
-            if [x.to_dict() for x in current_commands] != [x.to_dict() for x in self.commands]:
-                self.log(f"syncing {len(self.commands)} commands")
-                await self.http.bulk_overwrite_global_application_commands(
-                    [command.to_dict() for command in self.commands]
-                )
-                self.log(f"synced {len(self.commands)} commands")
+            current_commands = [x.to_dict() for x in current_commands]
+            gathered_commands = [x.to_dict() for x in self.commands]
+
+            for cmd in current_commands:
+                if not any(cmd == subcmd for subcmd in gathered_commands):
+                    
+                    self.log(f"syncing {len(self.commands)} commands")
+                    await self.http.bulk_overwrite_global_application_commands(
+                        [command.to_dict() for command in self.commands]
+                    )
+                    self.log(f"synced {len(self.commands)} commands")
+
+                    return
+                
 
     def _handle_deferred_routine(self, routine: asyncio.Task, request, after: Optional[Callable]):
         """
@@ -521,3 +536,13 @@ class Client:
             self.components.pop((callback.custom_id, callback.type))
         elif isinstance(callback, ModalCallback):
             self.modals.pop(callback.custom_id)
+
+
+
+    async def fetch_user(self, user_id: int) -> User:
+        """
+        Fetch a user object
+        """
+        data = await self.http.fetch_user(user_id)
+        if data is not None:
+            return from_dict(User, data, config=cast_config)
