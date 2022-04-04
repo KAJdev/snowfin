@@ -50,6 +50,23 @@ class FollowupMixin:
 
         return wrapper
 
+@dataclass 
+class CustomIdMappingsMixin:
+    """
+    A mixin for converting mappigs within interaction custom ids
+
+    e.g. the custom_id "role:{id}:{user}" provided with the mappings:
+    {'id': int, 'user': int} will add the `id` and `user` kwargs with
+    converted values if possible.
+
+    example usage:
+
+    @button_callback("add_role:{role}")
+    async def add_role_via_button(ctx, role: int):
+        pass
+    """
+    mappings: dict = field(default_factory=dict)
+
 @dataclass
 class InteractionCommand(Interactable, FollowupMixin):
     """
@@ -59,7 +76,7 @@ class InteractionCommand(Interactable, FollowupMixin):
     default_permission: bool = True
 
 @dataclass
-class ComponentCallback(Interactable, FollowupMixin):
+class ComponentCallback(Interactable, FollowupMixin, CustomIdMappingsMixin):
     """
     Discord component callback
     """
@@ -67,7 +84,7 @@ class ComponentCallback(Interactable, FollowupMixin):
     type: ComponentType = None
 
 @dataclass
-class ModalCallback(Interactable, FollowupMixin):
+class ModalCallback(Interactable, FollowupMixin, CustomIdMappingsMixin):
     """
     Discord modal callback
     """
@@ -337,11 +354,17 @@ def component_callback(
         if not asyncio.iscoroutinefunction(callback):
             raise ValueError("Callbacks must be coroutines")
 
+        mappings = kwargs
+
+        for kw, tp in callback.__annotations__.items():
+            if '{'+kw+'}' in custom_id:
+                mappings[kw] = tp
+
         return ComponentCallback(
             custom_id=custom_id,
             callback=callback,
             type=type,
-            **kwargs
+            mappings=mappings
         )
     
     return wrapper
@@ -353,18 +376,7 @@ def select_callback(
     """
     Create a select callback
     """
-    def wrapper(callback):
-        if not asyncio.iscoroutinefunction(callback):
-            raise ValueError("Callbacks must be coroutines")
-
-        return ComponentCallback(
-            custom_id=custom_id,
-            callback=callback,
-            type=ComponentType.SELECT,
-            **kwargs
-        )
-    
-    return wrapper
+    return component_callback(custom_id, ComponentType.SELECT, **kwargs)
 
 def button_callback(
     custom_id: str,
@@ -373,18 +385,7 @@ def button_callback(
     """
     Create a button callback
     """
-    def wrapper(callback):
-        if not asyncio.iscoroutinefunction(callback):
-            raise ValueError("Callbacks must be coroutines")
-
-        return ComponentCallback(
-            custom_id=custom_id,
-            callback=callback,
-            type=ComponentType.BUTTON,
-            **kwargs
-        )
-    
-    return wrapper
+    return component_callback(custom_id, CommandType.BUTTON, **kwargs)
 
 def modal_callback(
     custom_id: str,

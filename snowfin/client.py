@@ -534,6 +534,15 @@ class Client:
             if command.name == name:
                 return command
 
+    def get_component_callback(self, custom_id: str, component_type: ComponentType, ctx: Interaction) -> Callable:
+        for (_id, _type), callback in self.components.items():
+            if _id == custom_id and _type == component_type and not callback.mappings:
+                return functools.partial(callback.callback, ctx)
+
+            # now we look for mappings that fit the custom_id
+            # TODO: mappings search and return + partial creation
+
+
     def remove_callback(self, callback: Interactable):
         """
         Remove a callback from the client
