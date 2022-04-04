@@ -104,10 +104,11 @@ class Button:
         return d
 
 class SelectOption:
-    def __init__(self, label: str, value: str, description: str = None, emoji: str = None) -> None:
+    def __init__(self, label: str, value: str, description: str = None, emoji: str = None, default: bool = False) -> None:
         self.label = label
         self.value = value
         self.description = description
+        self.default = default
 
         if isinstance(emoji, str):
             self.emoji = Emoji.from_str(emoji)
@@ -119,7 +120,8 @@ class SelectOption:
     def to_dict(self):
         d = {
             "label": self.label,
-            "value": self.value
+            "value": self.value,
+            "default": self.default,
         }
 
         if self.emoji is not None:

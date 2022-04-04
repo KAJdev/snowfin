@@ -73,20 +73,27 @@ class MessageResponse(_DiscordResponse):
         content: str = MISSING,
         embed: Embed = MISSING,
         embeds: List[Embed] = MISSING,
-        components: Components = MISSING,
+        components: Components | list[Button | Select] = MISSING,
         ephemeral: bool = False,
         type: ResponseType = ResponseType.SEND_MESSAGE,
-        *components_
     ) -> None:
         self.type = type
         self.content = content
         self.embed = embed
         self.embeds = embeds
-        self.components = components or Components()
         self.ephemeral = ephemeral
+        self.components = MISSING
 
-        for component in components_:
-            self.add_component(component)
+        if components is not MISSING:
+            if isinstance(components, list):
+                for c in components:
+                    self.add_component(c)
+            elif isinstance(components, Components):
+                self.components = components
+            elif isinstance(components, (Button, Select)):
+                self.add_component(components)
+            else:
+                raise TypeError(f"components must be Components or a list of Button and Select, not {components.__class__}")
 
     def add_component(self, component: Union[Button, Select], row: int = None):
         if isinstance(component, TextInput):
@@ -160,15 +167,22 @@ class ModalResponse(_DiscordResponse):
         self,
         custom_id: str,
         title: str,
-        *components_,
-        components: Optional[Components] = None,
+        components: Components | list[TextInput] = MISSING,
     ) -> None:
         self.custom_id = custom_id
         self.title = title
-        self.components = components or Components()
-
-        for component in components_:
-            self.add_component(component)
+        self.components = MISSING
+        
+        if components is not MISSING:
+            if isinstance(components, list):
+                for c in components:
+                    self.add_component(c)
+            elif isinstance(components, Components):
+                self.components = components
+            elif isinstance(components, TextInput):
+                self.add_component(components)
+            else:
+                raise TypeError(f"components must be Components or a list of TextInput, not {components.__class__}")
 
     def add_component(self, component: TextInput, row: int = None):
         if not isinstance(component, TextInput):

@@ -450,7 +450,7 @@ class Client:
         """
         callbacks = [obj for _, obj in inspect.getmembers(sys.modules["__main__"]) + inspect.getmembers(self) if isinstance(obj, Interactable)]
         self._ingest_callbacks(*callbacks)
-        self.log(f"Loaded {len(callbacks)} callbacks")
+        self.log(f"Gathered {len(callbacks)} immediate callbacks")
 
     def add_interaction_command(self, command: InteractionCommand):
         """

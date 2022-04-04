@@ -33,7 +33,11 @@ class Module:
             new_cls, predicate=lambda x: isinstance(x, Interactable)
         ):
             val.module = new_cls
-            #val = functools.partial(val, new_cls)
+
+            if not isinstance(val.callback, functools.partial):
+                val_name = val.__name__
+                val.callback = functools.partial(val.callback, new_cls)
+                val.callback.__name__ = val_name
 
             new_cls.callbacks.append(val)
 
