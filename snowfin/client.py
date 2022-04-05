@@ -1,13 +1,11 @@
-from ast import arg
 import asyncio
 from contextlib import suppress
-from contextvars import Context
 from dataclasses import dataclass
-import dataclasses
+import functools
 import importlib
 import inspect
 import sys
-from typing import Callable, Coroutine, Optional
+from typing import Callable, Optional
 from functools import partial
 
 from sanic import Sanic, Request
@@ -326,11 +324,11 @@ class Client:
         elif request.ctx.type is RequestType.MESSAGE_COMPONENT:
             self.dispatch('component', request.ctx)
 
-            if component := self.components.get((request.ctx.data.custom_id, request.ctx.data.component_type)):
-                func = partial(component, request.ctx)
-
-                if component.after_callback:
-                    after = partial(component.after_callback, request.ctx)
+            func, after = self.package_component_callback(
+                request.ctx.data.custom_id,
+                request.ctx.data.component_type,
+                request.ctx
+            )
 
         elif request.ctx.type is RequestType.MODAL_SUBMIT:
             self.dispatch('modal', request.ctx)
@@ -448,7 +446,7 @@ class Client:
 
             del module
 
-    def get_module(self, name: str) -> Option[Module]:
+    def get_module(self, name: str) -> Optional[Module]:
         """
         Get a loaded module by name
         """
@@ -534,13 +532,40 @@ class Client:
             if command.name == name:
                 return command
 
-    def get_component_callback(self, custom_id: str, component_type: ComponentType, ctx: Interaction) -> Callable:
+    def package_component_callback(self, custom_id: str, component_type: ComponentType, ctx: Interaction) -> Callable:
         for (_id, _type), callback in self.components.items():
-            if _id == custom_id and _type == component_type and not callback.mappings:
-                return functools.partial(callback.callback, ctx)
+            if _id == custom_id and _type == component_type:
 
-            # now we look for mappings that fit the custom_id
-            # TODO: mappings search and return + partial creation
+                kwargs = {}
+
+                if None not in (callback.mappings, callback.chopped_id):
+                    just_values = []
+
+                    for i in range(len(callback.chopped_id)):
+                        before = callback.chopped_id[:i]
+                        after = callback.chopped_id[i:]
+                        data = custom_id.removeprefix(before).removesuffix(after)
+                        
+                        if data:
+                            just_values.append(data)
+
+                    if len(just_values) != len(callback.mappings):
+                        continue
+
+                    mappings = callback.mappings.items()
+                    for i, (name, _type) in enumerate(mappings):
+                        kwargs[name] = just_values[i]
+
+                        with suppress(ValueError):
+                            kwargs[name] = _type(kwargs[name])
+
+
+                return (
+                    functools.partial(callback.callback, ctx, **kwargs),
+                    functools.partial(callback.after_callback, ctx, **kwargs) if callback.after_callback else None
+                )
+
+        return None, None
 
 
     def remove_callback(self, callback: Interactable):
