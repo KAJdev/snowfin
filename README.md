@@ -57,5 +57,5 @@ you can see more examples in [/examples](https://github.com/KAJdev/snowfin/tree/
 ## Links
 
 - Library Docs (Coming Soon)
-- Discord Server (Coming Soon)
+- [Discord Server](https://discord.gg/mNwKWUkhh8)
 - [Interaction Docs](https://discord.com/developers/docs/interactions/application-commands)
