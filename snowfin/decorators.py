@@ -61,11 +61,15 @@ class CustomIdMappingsMixin:
 
     example usage:
 
+    ```
+    # this will match a custom_id like "add_role:123" and pass the value int(123)
     @button_callback("add_role:{role}")
     async def add_role_via_button(ctx, role: int):
         pass
+    ```
     """
     mappings: dict = field(default_factory=dict)
+    chopped_id: list[str] = field(default_factory=list)
 
 @dataclass
 class InteractionCommand(Interactable, FollowupMixin):
@@ -345,6 +349,7 @@ def listen(event_name: str = None) -> Callable:
 def component_callback(
     custom_id: str,
     type: ComponentType,
+    __no_mappings__: bool = False,
     **kwargs
 ) -> Callable:
     """
@@ -354,17 +359,30 @@ def component_callback(
         if not asyncio.iscoroutinefunction(callback):
             raise ValueError("Callbacks must be coroutines")
 
-        mappings = kwargs
+        if __no_mappings__:
+            mappings = chopped_id = None
+        else:
+            mappings = kwargs
 
-        for kw, tp in callback.__annotations__.items():
-            if '{'+kw+'}' in custom_id:
-                mappings[kw] = tp
+            chopped_id = []
+            left = [custom_id]
+
+            for kw, tp in callback.__annotations__.items():
+                if (param := '{'+kw+'}') in custom_id:
+                    mappings[kw] = tp
+                    _, *left = ''.join(left).split(param)
+
+                    if not _:
+                        raise ValueError(f"Mapped custom_id must have characters separating the mapped parameters")
+
+                    chopped_id.append(_)
 
         return ComponentCallback(
             custom_id=custom_id,
             callback=callback,
             type=type,
-            mappings=mappings
+            mappings=mappings,
+            chopped_id=chopped_id
         )
     
     return wrapper
@@ -385,10 +403,11 @@ def button_callback(
     """
     Create a button callback
     """
-    return component_callback(custom_id, CommandType.BUTTON, **kwargs)
+    return component_callback(custom_id, ComponentType.BUTTON, **kwargs)
 
 def modal_callback(
     custom_id: str,
+    __no_mappings__: bool = False,
     **kwargs
 ) -> Callable:
     """
@@ -398,10 +417,29 @@ def modal_callback(
         if not asyncio.iscoroutinefunction(callback):
             raise ValueError("Callbacks must be coroutines")
 
+        if __no_mappings__:
+            mappings = chopped_id = None
+        else:
+            mappings = kwargs
+
+            chopped_id = []
+            left = [custom_id]
+
+            for kw, tp in callback.__annotations__.items():
+                if (param := '{'+kw+'}') in custom_id:
+                    mappings[kw] = tp
+                    _, *left = ''.join(left).split(param)
+
+                    if not _:
+                        raise ValueError(f"Mapped custom_id must have characters separating the mapped parameters")
+
+                    chopped_id.append(_)
+
         return ModalCallback(
             custom_id=custom_id,
             callback=callback,
-            **kwargs
+            mappings=mappings,
+            chopped_id=chopped_id
         )
     
     return wrapper
