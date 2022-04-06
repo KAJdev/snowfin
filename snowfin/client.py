@@ -178,13 +178,11 @@ class Client:
             current_commands = [x.to_dict() for x in current_commands]
             gathered_commands = [x.to_dict() for x in self.commands]
 
-            for cmd in current_commands:
-                if not any(cmd == subcmd for subcmd in gathered_commands):
+            for cmd in gathered_commands:
+                if cmd not in current_commands:
                     
                     self.log(f"syncing {len(self.commands)} commands")
-                    await self.http.bulk_overwrite_global_application_commands(
-                        [command.to_dict() for command in self.commands]
-                    )
+                    await self.http.bulk_overwrite_global_application_commands(gathered_commands)
                     self.log(f"synced {len(self.commands)} commands")
 
                     return
@@ -534,20 +532,31 @@ class Client:
 
     def package_component_callback(self, custom_id: str, component_type: ComponentType, ctx: Interaction) -> Callable:
         for (_id, _type), callback in self.components.items():
-            if _id == custom_id and _type == component_type:
+            if _type == component_type:
 
                 kwargs = {}
 
                 if None not in (callback.mappings, callback.chopped_id):
                     just_values = []
 
+                    left = custom_id
+
                     for i in range(len(callback.chopped_id)):
-                        before = callback.chopped_id[:i]
-                        after = callback.chopped_id[i:]
-                        data = custom_id.removeprefix(before).removesuffix(after)
                         
-                        if data:
-                            just_values.append(data)
+                        segment = callback.chopped_id[i]
+
+                        if segment not in left:
+                            break
+
+                        left = left.removeprefix(segment)
+                        if i+1 < len(callback.mappings):
+                            value = left.strip(callback.chopped_id[i+1])[0]
+                        else:
+                            value = left
+                        
+                        just_values.append(value)
+                        left = left.removeprefix(value)
+                            
 
                     if len(just_values) != len(callback.mappings):
                         continue
@@ -558,6 +567,8 @@ class Client:
 
                         with suppress(ValueError):
                             kwargs[name] = _type(kwargs[name])
+                elif _id != custom_id:
+                        continue
 
 
                 return (

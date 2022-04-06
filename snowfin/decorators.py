@@ -360,8 +360,7 @@ def component_callback(
             raise ValueError("Callbacks must be coroutines")
 
         if __no_mappings__:
-            mappings = None
-            chopped_id = None
+            mappings = chopped_id = None
         else:
             mappings = kwargs
 
@@ -372,6 +371,10 @@ def component_callback(
                 if (param := '{'+kw+'}') in custom_id:
                     mappings[kw] = tp
                     _, *left = ''.join(left).split(param)
+
+                    if not _:
+                        raise ValueError(f"Mapped custom_id must have characters separating the mapped parameters")
+
                     chopped_id.append(_)
 
         return ComponentCallback(
@@ -400,7 +403,7 @@ def button_callback(
     """
     Create a button callback
     """
-    return component_callback(custom_id, CommandType.BUTTON, **kwargs)
+    return component_callback(custom_id, ComponentType.BUTTON, **kwargs)
 
 def modal_callback(
     custom_id: str,
@@ -415,8 +418,7 @@ def modal_callback(
             raise ValueError("Callbacks must be coroutines")
 
         if __no_mappings__:
-            mappings = None
-            chopped_id = None
+            mappings = chopped_id = None
         else:
             mappings = kwargs
 
@@ -427,6 +429,10 @@ def modal_callback(
                 if (param := '{'+kw+'}') in custom_id:
                     mappings[kw] = tp
                     _, *left = ''.join(left).split(param)
+
+                    if not _:
+                        raise ValueError(f"Mapped custom_id must have characters separating the mapped parameters")
+
                     chopped_id.append(_)
 
         return ModalCallback(
