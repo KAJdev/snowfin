@@ -531,23 +531,34 @@ class Client:
                 return command
 
     def package_component_callback(self, custom_id: str, component_type: ComponentType, ctx: Interaction) -> Callable:
+         # loop through all all our registered component callbacks
         for (_id, _type), callback in self.components.items():
+
+            # check the type first and foremost
             if _type == component_type:
 
                 kwargs = {}
 
+                # make sure there are actually mappings to check
                 if None not in (callback.mappings, callback.chopped_id):
                     just_values = []
 
                     left = custom_id
 
+                    # go through all the constants in the defined custom_id and
+                    # check if they match the mappings. Construct a list of the
+                    # values to pass to the callback and convert
                     for i in range(len(callback.chopped_id)):
                         
+                        # this is the next constant in the custom_id
                         segment = callback.chopped_id[i]
 
+                        # make sure the constant is in the custom_id
                         if segment not in left:
                             break
 
+                        # strip the constant from the custom_id so we know that
+                        # the next part of the string is the value
                         left = left.removeprefix(segment)
                         if i+1 < len(callback.mappings):
                             value = left.strip(callback.chopped_id[i+1])[0]
@@ -555,14 +566,19 @@ class Client:
                             value = left
                         
                         just_values.append(value)
+
+                        # remove the value from the custom_id so we know
+                        # that the next part of the string is the next constant
                         left = left.removeprefix(value)
                             
-
+                    # check to make sure that we have the right number of values collected
                     if len(just_values) != len(callback.mappings):
                         continue
 
                     mappings = callback.mappings.items()
                     for i, (name, _type) in enumerate(mappings):
+                        # convert the value to the correct type if possible
+
                         kwargs[name] = just_values[i]
 
                         with suppress(ValueError):
