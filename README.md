@@ -2,7 +2,8 @@
 An async discord http interactions framework built on top of Sanic.
 
 ## Installing
-For now just install the package through PIP via GitHub, make sure your Python version is at least 3.10.
+For now just install the package through PIP via GitHub
+> Please note that the library requires at least python 3.10
 ```sh
 # Unix based
 pip3 install git+https://github.com/kajdev/snowfin
