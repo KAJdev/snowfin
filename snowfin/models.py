@@ -3,7 +3,7 @@ from datetime import datetime
 from dacite import from_dict, config
 from typing import Any, Dict, List, Optional, Union
 
-from snowfin.components import ActionRow, Components
+from snowfin.components import Components
 
 from .enums import ChannelType, OptionType, CommandType, ComponentType, Permissions, RequestType
 from .embed import Embed

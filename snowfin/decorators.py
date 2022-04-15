@@ -29,8 +29,8 @@ class Interactable:
     callback: Optional[Callable] = None
     module = None
 
-    def __call__(self, context, *args, **kwargs):
-        return self.callback(context, *args, **kwargs)
+    def __call__(self, *args, **kwargs):
+        return self.callback(*args, **kwargs)
 
     def __str__(self):
         return f'{self.module}:{self.callback.__name__}'

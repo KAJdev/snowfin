@@ -81,7 +81,7 @@ class Client:
         self.sync_commands = sync_commands
 
         self.log = lambda *msgs: logger.info(' '.join(str(msg) for msg in msgs))
-        self.log_error = lambda *msgs: logger.error(' '.join(str(msg) for msg in msgs))
+        self.error = lambda *msgs: logger.error(' '.join(str(msg) for msg in msgs))
 
         self.http: HTTP = HTTP(
             application_id=application_id,

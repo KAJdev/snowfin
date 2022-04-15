@@ -11,7 +11,7 @@ async def on_slash(context: Interaction):
     Slash command docstrings can be used for descriptions
     """
 
-    return MessageResponse(content="Click this button!", components=Button(
+    return MessageResponse("Click this button!", Button(
         label="Click me!",
         custom_id="click_me",
     ))
