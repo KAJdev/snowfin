@@ -122,8 +122,8 @@ class Client:
         # create middlware for verifying that discord is the one who sent the interaction
         @self.app.on_request
         async def verify_signature(request: Request):
-            signature = request.headers["X-Signature-Ed25519"]
-            timestamp = request.headers["X-Signature-Timestamp"]
+            signature = request.headers.get("X-Signature-Ed25519")
+            timestamp = request.headers.get("X-Signature-Timestamp")
             body = request.body.decode("utf-8")
 
             try:
