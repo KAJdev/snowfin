@@ -16,6 +16,12 @@ class Choice:
     name: str
     value: Union[str, int, float]
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "value": self.value
+        }
+
 @dataclass
 class User:
     id: int
