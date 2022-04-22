@@ -129,13 +129,13 @@ class SlashOption:
         }
 
         if self.choices:
-            d['choices'] = [c.to_dict() for c in self.choices]
+            d['choices'] = [c.to_dict() if isinstance(c, Choice) else c for c in self.choices]
 
         if self.options:
-            d['options'] = [o.to_dict() for o in self.options]
+            d['options'] = [o.to_dict() if isinstance(o, SlashOption) else o for o in self.options]
 
         if self.channel_types:
-            d['channel_types'] = [c.value for c in self.channel_types]
+            d['channel_types'] = [c.value if isinstance(c, ChannelType) else c for c in self.channel_types]
 
         return d
 
@@ -166,7 +166,7 @@ class SlashCommand(InteractionCommand):
         }
 
         if self.options:
-            d['options'] = [o.to_dict() for o in self.options]
+            d['options'] = [o.to_dict() if isinstance(o, SlashOption) else o for o in self.options]
 
         return d
 
