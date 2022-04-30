@@ -18,7 +18,7 @@ from nacl.exceptions import BadSignatureError
 
 from dacite import from_dict, config
 from snowfin.components import Components, TextInput, is_component
-from snowfin.errors import CogLoadError
+from snowfin.errors import CogLoadError, HTTPException
 
 from snowfin.models import *
 from snowfin.module import Module
@@ -109,11 +109,18 @@ class Client:
         # create some middleware for start and stop events
         @self.app.listener('after_server_start')
         async def on_start(app, loop):
-            await self._sync_commands()
+            try:
+                await self._sync_commands()
+            except HTTPException as e:
+                self.error(f"failed to sync commands: {e}")
+
             self.dispatch('start')
 
             if self.http.application_id:
-                self.user = await self.fetch_user(self.http.application_id)
+                try:
+                    self.user = await self.fetch_user(self.http.application_id)
+                except HTTPException as e:
+                    self.error(f"failed to fetch application bot user: {e}")
 
         @self.app.listener('before_server_stop')
         async def on_stop(app, loop):
