@@ -101,7 +101,7 @@ class Channel:
     name: str
     type: ChannelType
     permissions: int
-    thread_metadata: Optional[Dict]
+    thread_metadata: Optional[dict]
     parent_id: Optional[int]
 
 @dataclass
