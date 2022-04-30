@@ -302,7 +302,9 @@ class Client:
                     if option.type in (OptionType.CHANNEL, OptionType.USER, OptionType.ROLE, OptionType.MENTIONABLE):
                         converted = request.ctx.data.resolved.get(option.type, option.value)
                     else:
-                        converted = type(option.value)
+                        _type = cmd.callback.__annotations__.get(option.name)
+                        if _type:
+                            converted = _type(option.value)
 
                     kwargs[option.name] = converted
                         
