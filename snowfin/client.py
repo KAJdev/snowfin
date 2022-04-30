@@ -126,6 +126,9 @@ class Client:
             timestamp = request.headers.get("X-Signature-Timestamp")
             body = request.body.decode("utf-8")
 
+            if not signature or not timestamp or not body:
+                return json({"error": "invalid headers"}, status=400)
+
             try:
                 self.verify_key.verify(f'{timestamp}{body}'.encode(), bytes.fromhex(signature))
             except BadSignatureError:
