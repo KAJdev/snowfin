@@ -163,12 +163,26 @@ class Message:
             self.components = Components.from_list(self.components)
 
 @dataclass
+class Attachment:
+    id: int
+    filename: str
+    description: str
+    content_type: str
+    size: int
+    url: str
+    proxy_url: str
+    height: Optional[int]
+    width: Optional[int]
+    ephemeral: Optional[bool]
+
+@dataclass
 class Resolved:
     users: Dict[str, User] = field(default_factory=dict)
     members: Dict[str, Member] = field(default_factory=dict)
     roles: Dict[str, Role] = field(default_factory=dict)
     channels: Dict[str, Channel] = field(default_factory=dict)
     messages: Dict[str, Message] = field(default_factory=dict)
+    attachments: Dict[str, Attachment] = field(default_factory=dict)
 
     def get(self, type: OptionType, key: str | int) -> Any:
         key = str(key)
@@ -191,6 +205,8 @@ class Resolved:
                 gotten.user = self.users.get(key) or gotten.user
 
             return gotten
+        elif type is OptionType.ATTACHMENT:
+            return self.attachments.get(key)
 
 @dataclass
 class Option:
