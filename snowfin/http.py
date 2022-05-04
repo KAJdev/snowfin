@@ -131,7 +131,9 @@ class HTTP:
         """
         Make a followup request
         """
-        print(f"Requesting {route.method} {route.url} with {data}")
+        print(f"Requesting {route.method} {route.url}")
+        if data is not None:
+            print(json.dumps(data, indent=2))
 
         headers = self.headers.copy()
 
@@ -166,7 +168,8 @@ class HTTP:
                 except KeyError:
                     pass
 
-                print(f"Got discord response ({response.status}): {response_data}")
+                print(f"Got discord response ({response.status}):")
+                print(json.dumps(response_data, indent=2))
 
                 if 300 > response.status >= 200:
                     return response_data

@@ -34,15 +34,30 @@ class Module:
         ):
             val.module = new_cls
 
-            if not isinstance(val.callback, functools.partial):
-                val_name = val.__name__
-                val.callback = functools.partial(val.callback, new_cls)
-                val.callback.__name__ = val_name
+            if val.callback:
+                if not isinstance(val.callback, functools.partial):
+                    val_name = val.__name__
+                    val.callback = functools.partial(val.callback, new_cls)
+                    val.callback.__name__ = val_name
 
-            new_cls.callbacks.append(val)
+                new_cls.callbacks.append(val)
+
+            if getattr(val, 'after_callback', None):
+                if not isinstance(val.after_callback, functools.partial):
+                    val_name = val.__name__
+                    val.after_callback = functools.partial(val.after_callback, new_cls)
+                    val.after_callback.__name__ = val_name
+
+            if getattr(val, 'autocomplete_callbacks', None):
+                for key,ac_callback in val.autocomplete_callbacks.items():
+                    if not isinstance(ac_callback, functools.partial):
+                        val_name = val.__name__
+                        val.autocomplete_callbacks[key] = functools.partial(ac_callback, new_cls)
+                        ac_callback.__name__ = val_name
 
             if isinstance(val, InteractionCommand):
-                client.add_interaction_command(val)
+                if not val.parent:
+                    client.add_interaction_command(val)
             elif isinstance(val, Listener):
                 client.add_listener(val)
             elif isinstance(val, ComponentCallback):

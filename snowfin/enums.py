@@ -1,4 +1,4 @@
-from enum import Enum, Flag
+from enum import Enum, Flag, IntFlag
 from typing import Any
 
 __all__ = (
@@ -118,10 +118,11 @@ class TextStyleTypes(Enum):
     SHORT = 1
     PARAGRAPH = 2
 
-class Permissions:
+class Permissions(IntFlag):
     """
     Enum for the different permissions.
     """
+    NONE = 0
     CREATE_INSTANT_INVITE = 1
     KICK_MEMBERS = 1 << 1
     BAN_MEMBERS = 1 << 2
@@ -163,53 +164,3 @@ class Permissions:
     SEND_MESSAGES_IN_THREADS = 1 << 38
     USE_EMBEDDED_ACTIVITIES = 1 << 39
     MODERATE_MEMBERS = 1 << 40
-
-    def __init__(self, value):
-        self.value = int(value)
-
-    def __or__(self, other):
-        return Permissions(self.value | other.value)
-
-    def __and__(self, other):
-        return Permissions(self.value & other.value)
-
-    def __xor__(self, other):
-        return Permissions(self.value ^ other.value)
-    
-    def __invert__(self):
-        return Permissions(~self.value)
-
-    def __repr__(self):
-        return f'Permissions({self.value})'
-
-    def __str__(self):
-        return f'Permissions({self.value})'
-
-    def __int__(self):
-        return self.value
-
-    def __bool__(self):
-        return self.value != 0
-
-    def __eq__(self, other):
-        return self.value == other.value
-
-    def __ne__(self, other):
-        return self.value != other.value
-
-    def __hash__(self):
-        return hash(self.value)
-
-    def __contains__(self, other):
-        return self.value & other.value == other.value
-
-    def __iter__(self):
-        for perm in Permissions:
-            if self.value & perm.value:
-                yield perm
-
-    def __len__(self):
-        return len(list(self))
-
-    def __instancecheck__(self, __instance: Any) -> bool:
-        return isinstance(__instance, Permissions)
