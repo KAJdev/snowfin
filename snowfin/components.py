@@ -2,14 +2,14 @@ from typing import Union, List
 from .enums import ButtonStyle, ComponentType, TextStyleTypes
 
 __all__ = (
-    'Components',
-    'Emoji',
-    'Button',
-    'Select',
-    'SelectOption',
-    'ActionRow',
-    'TextInput',
-    'is_component',
+    "Components",
+    "Emoji",
+    "Button",
+    "Select",
+    "SelectOption",
+    "ActionRow",
+    "TextInput",
+    "is_component",
 )
 
 
@@ -24,10 +24,10 @@ class Emoji:
         if len(emoji_string) == 1:
             return cls(name=emoji_string, id=None)
 
-        emoji_string = emoji_string.strip('<>')
-        data = emoji_string.split(':')
+        emoji_string = emoji_string.strip("<>")
+        data = emoji_string.split(":")
         if len(data) == 3:
-            return cls(data[1], str(data[2]), animated='a' in data[0])
+            return cls(data[1], str(data[2]), animated="a" in data[0])
         elif len(data) == 2:
             return cls(data[0], str(data[1]))
         else:
@@ -40,15 +40,13 @@ class Emoji:
         return f"<Emoji {self.name=} {self.id=} {self.animated=}>"
 
     def to_dict(self):
-        d = {
-            'name': self.name,
-            'id': self.id
-        }
+        d = {"name": self.name, "id": self.id}
 
         if self.animated:
-            d['animated'] = True
+            d["animated"] = True
 
         return d
+
 
 class Button:
     def __init__(
@@ -59,7 +57,7 @@ class Button:
         style: ButtonStyle = ButtonStyle.PRIMARY,
         emoji: Union[str, Emoji] = None,
         url: str = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.weight = 1
         self.type = ComponentType.BUTTON
@@ -77,7 +75,7 @@ class Button:
 
         if self.style is ButtonStyle.URL and self.url is None:
             raise ValueError("URL button requires a URL")
-        
+
         if self.url is not None:
             self.style = ButtonStyle.URL
             self.custom_id = None
@@ -91,20 +89,28 @@ class Button:
         }
 
         if self.style is ButtonStyle.URL:
-            d['url'] = self.url
+            d["url"] = self.url
         else:
-            d['custom_id'] = self.custom_id
+            d["custom_id"] = self.custom_id
 
         if self.style is not ButtonStyle.URL and self.custom_id is None:
             raise ValueError("Button requires a custom_id")
 
         if self.emoji is not None:
-            d['emoji'] = self.emoji.to_dict()
+            d["emoji"] = self.emoji.to_dict()
 
         return d
 
+
 class SelectOption:
-    def __init__(self, label: str, value: str, description: str = None, emoji: str = None, default: bool = False) -> None:
+    def __init__(
+        self,
+        label: str,
+        value: str,
+        description: str = None,
+        emoji: str = None,
+        default: bool = False,
+    ) -> None:
         self.label = label
         self.value = value
         self.description = description
@@ -132,6 +138,7 @@ class SelectOption:
 
         return d
 
+
 class Select:
     def __init__(
         self,
@@ -141,7 +148,7 @@ class Select:
         options: List[SelectOption] = None,
         min_values: int = 1,
         max_values: int = 1,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.weight = 5
         self.type = ComponentType.SELECT
@@ -153,7 +160,9 @@ class Select:
             raise ValueError("Select requires at least one option")
         elif len(options) > 25:
             raise ValueError("Select cannot have more than 25 options")
-        self.options = [SelectOption(**x) if not isinstance(x, SelectOption) else x for x in options]
+        self.options = [
+            SelectOption(**x) if not isinstance(x, SelectOption) else x for x in options
+        ]
 
         self.min_values = min_values
         self.max_values = max_values
@@ -191,8 +200,9 @@ class Select:
             "disabled": self.disabled,
             "options": [x.to_dict() for x in self.options],
             "min_values": self.min_values,
-            "max_values": self.max_values
+            "max_values": self.max_values,
         }
+
 
 class TextInput:
     def __init__(
@@ -203,7 +213,7 @@ class TextInput:
         placeholder: str = None,
         min_length: int = None,
         max_length: int = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.weight = 5
         self.type = ComponentType.INPUT_TEXT
@@ -260,18 +270,20 @@ class ActionRow:
     def to_dict(self):
         return {
             "type": self.type.value,
-            "components": [x.to_dict() for x in self.components]
+            "components": [x.to_dict() for x in self.components],
         }
 
-class Components:
 
+class Components:
     def __init__(self, *components) -> None:
         self.rows = [ActionRow() for _ in range(5)]
 
         for component in components:
             self.add_component(component)
 
-    def add_component(self, component: Union[Button, Select, TextInput], row: int = None):
+    def add_component(
+        self, component: Union[Button, Select, TextInput], row: int = None
+    ):
         if row is None:
             for _row in self.rows:
                 if _row.weights + component.weight <= 5:
@@ -288,22 +300,29 @@ class Components:
             raise ValueError("Cannot add component, weight limit exceeded")
 
     def add_component_raw(self, component: dict, row: int = None):
-        if component.get('type') == ComponentType.BUTTON.value:
+        if component.get("type") == ComponentType.BUTTON.value:
             component = Button(**component)
-        elif component.get('type') == ComponentType.SELECT.value:
+        elif component.get("type") == ComponentType.SELECT.value:
             component = Select(**component)
-        elif component.get('type') == ComponentType.INPUT_TEXT.value:
+        elif component.get("type") == ComponentType.INPUT_TEXT.value:
             component = TextInput(**component)
         else:
             raise ValueError("Component type not supported")
 
         return self.add_component(component, row)
 
-    def replace_component(self, component: Union[Button, Select, str], new_component: Union[Button, Select]):
+    def replace_component(
+        self,
+        component: Union[Button, Select, str],
+        new_component: Union[Button, Select],
+    ):
         if isinstance(component, str):
             for row in self.rows:
                 for index, _component in enumerate(row.components):
-                    if _component.custom_id == component and _component.type == new_component.type:
+                    if (
+                        _component.custom_id == component
+                        and _component.type == new_component.type
+                    ):
                         row[index] = new_component
                         return self
             raise ValueError("Component does not exist")
@@ -343,11 +362,12 @@ class Components:
     @classmethod
     def from_list(cls, data: list[dict]):
         components = cls()
-        for row,action_row in enumerate(data):
-            for component in action_row.get('components', []):
+        for row, action_row in enumerate(data):
+            for component in action_row.get("components", []):
                 components.add_component_raw(component, row)
-            
+
         return components
+
 
 def is_component(obj) -> bool:
     return isinstance(obj, (Button, Select, TextInput))
