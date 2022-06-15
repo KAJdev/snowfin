@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "snowfin"
-version = "0.1.0"
+version = "0.1.1"
 description = "An async discord http interactions framework built on top of Sanic."
 authors = ["kaj <40004347+KAJdev@users.noreply.github.com>"]
 license = "MIT"
