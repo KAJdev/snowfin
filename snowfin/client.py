@@ -114,6 +114,9 @@ class Client:
         # gather callbacks
         self._gather_callbacks()
 
+        # set logging level
+        logger.setLevel(logging_level)
+
         # create some middleware for start and stop events
         @self.app.listener("after_server_start")
         async def on_start(app, loop):
@@ -670,3 +673,8 @@ class Client:
         data = await self.http.fetch_user(user_id)
         if data is not None:
             return from_dict(User, data, config=cast_config)
+
+    def command(self, command: SlashCommand) -> SlashCommand:
+        """Adds a command to the bot"""
+        self.commands.append(command)
+        return command
