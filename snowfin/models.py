@@ -1,11 +1,16 @@
+import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime
 from dacite import from_dict, config
 from typing import Any, Dict, List, Optional, Union
 
-from snowfin.components import Components
+from sanic import HTTPResponse
 
-from .enums import ChannelType, OptionType, CommandType, ComponentType, Permissions, RequestType
+from snowfin.components import Components
+from snowfin.locales import Localization
+from snowfin.response import _DiscordResponse
+
+from .enums import ChannelType, OptionType, CommandType, ComponentType, Permissions, RequestType, ResponseType
 from .embed import Embed
 
 @dataclass
@@ -15,11 +20,13 @@ class Choice:
     """
     name: str
     value: Union[str, int, float]
+    name_localizations: Optional[Localization] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "name": self.name,
-            "value": self.value
+            "value": self.value,
+            "name_localizations": self.name_localizations.to_dict() if self.name_localizations else None
         }
 
 @dataclass
@@ -101,7 +108,7 @@ class Channel:
     name: str
     type: ChannelType
     permissions: int
-    thread_metadata: Optional[Dict]
+    thread_metadata: Optional[dict]
     parent_id: Optional[int]
 
 @dataclass
@@ -163,12 +170,26 @@ class Message:
             self.components = Components.from_list(self.components)
 
 @dataclass
+class Attachment:
+    id: int
+    filename: str
+    description: str
+    content_type: str
+    size: int
+    url: str
+    proxy_url: str
+    height: Optional[int]
+    width: Optional[int]
+    ephemeral: Optional[bool]
+
+@dataclass
 class Resolved:
     users: Dict[str, User] = field(default_factory=dict)
     members: Dict[str, Member] = field(default_factory=dict)
     roles: Dict[str, Role] = field(default_factory=dict)
     channels: Dict[str, Channel] = field(default_factory=dict)
     messages: Dict[str, Message] = field(default_factory=dict)
+    attachments: Dict[str, Attachment] = field(default_factory=dict)
 
     def get(self, type: OptionType, key: str | int) -> Any:
         key = str(key)
@@ -191,6 +212,8 @@ class Resolved:
                 gotten.user = self.users.get(key) or gotten.user
 
             return gotten
+        elif type is OptionType.ATTACHMENT:
+            return self.attachments.get(key)
 
 @dataclass
 class Option:
@@ -198,6 +221,7 @@ class Option:
     name: str
     type: OptionType
     value: Optional[Union[str, int, float]]
+    options: Optional[List['Option']]
 
 @dataclass
 class Command:
@@ -231,6 +255,7 @@ class Interaction:
 
     # added later
     client: Optional[Any]
+    request: Optional[Any]
     responded: bool = False
 
     def __post_init__(self) -> None:
@@ -256,3 +281,27 @@ class Interaction:
     @property
     def author(self) -> Member | User:
         return self.member if self.member else self.user
+
+    def send(self, *response) -> Any:
+        if self.client is None:
+            raise ValueError('Client is not set')
+        if self.request is None:
+            raise ValueError('Request is not set')
+
+        task = None
+        
+        if not isinstance(response, (_DiscordResponse, HTTPResponse)):
+            response = self.client.infer_response(response)
+
+        if response.type is ResponseType.SEND_MESSAGE:
+            task = self.client.http.send_followup(self.request, response)
+        elif response.type is ResponseType.EDIT_ORIGINAL_MESSAGE:
+            task = self.client.http.edit_original_message(self.request, response)
+        else:
+            raise Exception("Invalid response type")
+
+        # this task approach allows for awaiting as well as calling synchronously
+        # without having to worry about anything.
+        if task is not None:
+            self.responded = True
+            return asyncio.create_task(task)

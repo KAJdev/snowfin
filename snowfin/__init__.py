@@ -10,7 +10,7 @@ __title__ = 'snowfin'
 __author__ = 'kajdev'
 __license__ = 'MIT'
 __copyright__ = 'Copyright 2021-present kaj'
-__version__ = '1.0'
+__version__ = '0.1.1'
 
 from .decorators import *
 from .response import *

@@ -1,10 +1,9 @@
 from dataclasses import asdict
-from typing import Callable, Coroutine, List, Optional, Union, Iterable
+from typing import Callable, Union
 from abc import ABC, abstractmethod
 import asyncio
 
 from .embed import Embed
-from .models import Choice
 from .enums import ResponseType
 from .components import Components, Button, Select, TextInput
 
@@ -37,7 +36,7 @@ class _DiscordResponse(ABC):
 class AutocompleteResponse(_DiscordResponse):
     def __init__(
         self,
-        *choices: List[Choice],
+        *choices,
         **kwargs
     ) -> None:
         super().__init__(ResponseType.AUTOCOMPLETE, choices=choices, **kwargs)
@@ -72,7 +71,7 @@ class MessageResponse(_DiscordResponse):
         self, 
         content: str = MISSING,
         embed: Embed = MISSING,
-        embeds: List[Embed] = MISSING,
+        embeds: list[Embed] = MISSING,
         components: Components | list[Button | Select] = MISSING,
         ephemeral: bool = False,
         type: ResponseType = ResponseType.SEND_MESSAGE,

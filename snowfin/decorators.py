@@ -1,9 +1,12 @@
 import asyncio
 from dataclasses import dataclass, field, asdict
+from functools import partial, partialmethod
+import inspect
 from typing import Callable, Optional, Union
 
-from snowfin.enums import ChannelType, CommandType, ComponentType, OptionType
-from .models import Choice
+from snowfin.enums import ChannelType, CommandType, ComponentType, OptionType, Permissions
+from snowfin.locales import Localization
+from .models import Choice, Option
 
 __all__ = (
     'SlashCommand',
@@ -37,7 +40,7 @@ class Interactable:
 
     @property
     def __name__(self) -> str:
-        return self.callback.__name__
+        return self.callback.__name__ if self.callback else None
 
 @dataclass
 class FollowupMixin:
@@ -77,7 +80,22 @@ class InteractionCommand(Interactable, FollowupMixin):
     Discord command
     """
     name: str = None
+    description: str = "No description set"
+    default_member_permissions: Optional[Permissions] = None
+    name_localizations: Optional[Localization] = None
+    description_localizations: Optional[Localization] = None
+    dm_permission: bool = True
+
+    # DEPRECATED
     default_permission: bool = True
+
+    @property
+    def resolved_name(self) -> str:
+        """
+        the resolved name of the command, including the parent group names
+        used for callback routing via Client
+        """
+        return self.name
 
 @dataclass
 class ComponentCallback(Interactable, FollowupMixin, CustomIdMappingsMixin):
@@ -116,17 +134,24 @@ class SlashOption:
     channel_types: Optional[list[ChannelType]] = None
     required: bool = False
     autocomplete: bool = False
+    name_localizations: Optional[Localization] = None
 
     def to_dict(self):
         d = {
             'name': self.name,
             'type': self.type.value if isinstance(self.type, OptionType) else self.type,
             'description': self.description,
-            'min_value': self.min_value,
-            'max_value': self.max_value,
             'required': self.required,
-            'autocomplete': self.autocomplete
         }
+
+        if self.min_value:
+            d['min_value'] = self.min_value
+        
+        if self.max_value:
+            d['max_value'] = self.max_value
+
+        if self.autocomplete:
+            d['autocomplete'] = self.autocomplete
 
         if self.choices:
             d['choices'] = [c.to_dict() if isinstance(c, Choice) else c for c in self.choices]
@@ -137,19 +162,53 @@ class SlashOption:
         if self.channel_types:
             d['channel_types'] = [c.value if isinstance(c, ChannelType) else c for c in self.channel_types]
 
+        if self.name_localizations:
+            d['name_localizations'] = self.name_localizations.to_dict()
+
+        if self.description_localizations:
+            d['description_localizations'] = self.description_localizations.to_dict()
+
         return d
+
 
 @dataclass
 class SlashCommand(InteractionCommand):
-    name: str = None
-    description: str = "No Description Set"
-
     options: list[SlashOption | dict] = field(default_factory=list)
     autocomplete_callbacks: dict = field(default_factory=dict)
 
+    parent: Optional['SlashCommand'] = None
+
+    @property
+    def resolved_name(self) -> str:
+        """
+        the resolved name of the command, including the parent group names
+        used for callback routing via Client
+        """
+        n = self.name
+
+        if self.parent:
+            n = f"{self.parent.name} {n}"
+
+            if self.parent.parent:
+                n = f"{self.parent.parent.name} {n}"
+
+        return n
+
     def __post_init__(self):
         if self.options:
-            self.options = [SlashOption(**o) if isinstance(o, dict) else o for o in self.options]
+            new_options = []
+
+            for option in self.options:
+                if isinstance(option, dict):
+                    for opt in option.get('options', []):
+                        if opt.get('type') in (1,2):
+                            new_options.append(SlashCommand(**opt))
+                            continue
+                    new_options.append(SlashOption(**option))
+                else:
+                    new_options.append(option)
+
+            self.options = new_options
 
         if self.callback is not None:
             if hasattr(self.callback, 'options'):
@@ -157,16 +216,57 @@ class SlashCommand(InteractionCommand):
                     self.options = []
                 self.options += self.callback.options
 
+    @property
+    def resolved_type(self) -> int:
+        """
+        the resolved type of the command, including the parent group types
+        used for callback routing via Client
+        """
+        if self.parent is not None:
+            if self.parent.parent is not None:
+                return OptionType.SUB_COMMAND.value
+            
+            for thing in self.options:
+                if isinstance(thing, SlashCommand):
+                    return OptionType.SUB_COMMAND_GROUP.value
+
+            return OptionType.SUB_COMMAND.value
+
+        return CommandType.CHAT_INPUT.value
+
+    def get_lowest_command(self, options: list[Option]) -> 'SlashCommand':
+        """
+        get the lowest command in the chain of commands
+        """
+        for option in options:
+            if option.type is OptionType.SUB_COMMAND_GROUP:
+                return next(filter(lambda x: x.name == option.name, self.options)).get_lowest_command(option.options)
+            elif option.type is OptionType.SUB_COMMAND:
+                return next(filter(lambda x: x.name == option.name, self.options), None), option.options
+
+        return self, options
+
     def to_dict(self):
         d = {
             'name': self.name,
             'description': self.description,
-            'type': CommandType.CHAT_INPUT.value,
-            'default_permission': self.default_permission
+            'type': self.resolved_type,
+            'options': [],
+            'name_localizations': self.name_localizations.to_dict() if self.name_localizations else None,
+            'description_localizations': self.description_localizations.to_dict() if self.description_localizations else None,
         }
 
+        if not self.parent:
+            d.update({
+                'dm_permission': self.dm_permission,
+                'default_permission': self.default_permission,
+                'default_member_permissions': self.default_member_permissions.value if self.default_member_permissions else None,
+            })
+        
         if self.options:
-            d['options'] = [o.to_dict() if isinstance(o, SlashOption) else o for o in self.options]
+            for option in self.options:
+                if not isinstance(option, dict):
+                    d['options'].append(option.to_dict())
 
         return d
 
@@ -188,6 +288,65 @@ class SlashCommand(InteractionCommand):
 
         return wrapper
 
+    def group(
+        self, 
+        name: str, 
+        description: str = None, 
+        default_member_permissions: Permissions = None
+    ) -> 'SlashCommand':
+        """
+        Create a sub command group
+        """
+        if getattr(self.parent, 'parent', None) is not None:
+            raise ValueError("Cannot nest command groups deeper than one level")
+
+        group = SlashCommand(
+            name=name,
+            description=description or "No Description Set",
+            default_member_permissions=default_member_permissions,
+            parent=self
+        )
+
+        self.options.append(group)
+
+        return group
+        
+
+    def subcommand(
+        self,
+        name: str,
+        description: str = None,
+        options: list[SlashOption] = None,
+        default_member_permissions: Permissions = None,
+        **kwargs
+    ) -> 'SlashCommand':
+        """
+        Create a sub command in the current command group
+        """
+        def wrapper(callback):
+            if not asyncio.iscoroutinefunction(callback):
+                raise ValueError("Commands must be coroutines")
+
+            for thing in self.options:
+                if isinstance(thing, SlashCommand) and thing.resolved_type == OptionType.SUB_COMMAND_GROUP.value:
+                    raise ValueError("Cannot mix sub commands and command groups within a single group")
+
+            cmd = SlashCommand(
+                name=name,
+                description=description or callback.__doc__ or "No Description Set",
+                options=options or [],
+                default_member_permissions=default_member_permissions,
+                callback=callback,
+                parent=self,
+                **kwargs
+            )
+
+            self.options.append(cmd)
+
+            return cmd
+        
+        return wrapper
+
 @dataclass
 class ContextMenu(InteractionCommand):
     type: CommandType = None
@@ -196,14 +355,17 @@ class ContextMenu(InteractionCommand):
         return {
             'name': self.name,
             'type': self.type.value,
-            'default_permission': self.default_permission
+            'default_member_permissions': self.default_member_permissions.value if self.default_member_permissions else None,
+            'default_permission': self.default_permission,
+            'name_localizations': self.name_localizations.to_dict() if self.name_localizations else None,
+            'description_localizations': self.description_localizations.to_dict() if self.description_localizations else None,
         }
 
 def slash_command(
     name: str,
     description: str = None,
     options: list[SlashOption] = None,
-    default_permission: bool = True,
+    default_member_permissions: Optional[Permissions] = None,
     **kwargs
 ) -> Callable:
     """
@@ -217,7 +379,7 @@ def slash_command(
             name=name,
             description=description or callback.__doc__ or "No Description Set",
             options=options or [],
-            default_permission=default_permission,
+            default_member_permissions=default_member_permissions,
             callback=callback,
             **kwargs
         )
@@ -267,7 +429,7 @@ def slash_option(
 def context_menu(
     name: str,
     type: CommandType,
-    default_permission: bool = True,
+    default_member_permissions: Optional[Permissions] = None,
     **kwargs
 ) -> Callable:
     """
@@ -280,7 +442,7 @@ def context_menu(
         return ContextMenu(
             name=name,
             type=type,
-            default_permission=default_permission,
+            default_member_permissions=default_member_permissions,
             callback=callback,
             **kwargs
         )
@@ -289,7 +451,7 @@ def context_menu(
 
 def message_command(
     name: str,
-    default_permission: bool = True,
+    default_member_permissions: Optional[Permissions] = None,
     **kwargs
 ) -> Callable:
     """
@@ -302,7 +464,7 @@ def message_command(
         return ContextMenu(
             name=name,
             type=CommandType.MESSAGE,
-            default_permission=default_permission,
+            default_member_permissions=default_member_permissions,
             callback=callback,
             **kwargs
         )
@@ -311,7 +473,7 @@ def message_command(
 
 def user_command(
     name: str,
-    default_permission: bool = True,
+    default_member_permissions: Optional[Permissions] = None,
     **kwargs
 ) -> Callable:
     """
@@ -324,7 +486,7 @@ def user_command(
         return ContextMenu(
             name=name,
             type=CommandType.USER,
-            default_permission=default_permission,
+            default_member_permissions=default_member_permissions,
             callback=callback,
             **kwargs
         )

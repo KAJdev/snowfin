@@ -18,7 +18,7 @@ from nacl.exceptions import BadSignatureError
 
 from dacite import from_dict, config
 from snowfin.components import Components, TextInput, is_component
-from snowfin.errors import CogLoadError
+from snowfin.errors import CogLoadError, HTTPException
 
 from snowfin.models import *
 from snowfin.module import Module
@@ -42,7 +42,8 @@ cast_config=config.Config(
         CommandType,
         OptionType,
         ComponentType,
-        RequestType
+        RequestType,
+        Permissions,
     ]
 )
 
@@ -109,11 +110,18 @@ class Client:
         # create some middleware for start and stop events
         @self.app.listener('after_server_start')
         async def on_start(app, loop):
-            await self._sync_commands()
+            try:
+                await self._sync_commands()
+            except HTTPException as e:
+                self.error(f"failed to sync commands: {e}")
+
             self.dispatch('start')
 
             if self.http.application_id:
-                self.user = await self.fetch_user(self.http.application_id)
+                try:
+                    self.user = await self.fetch_user(self.http.application_id)
+                except HTTPException as e:
+                    self.error(f"failed to fetch application bot user: {e}")
 
         @self.app.listener('before_server_stop')
         async def on_stop(app, loop):
@@ -126,6 +134,9 @@ class Client:
             timestamp = request.headers.get("X-Signature-Timestamp")
             body = request.body.decode("utf-8")
 
+            if not signature or not timestamp or not body:
+                return json({"error": "invalid headers"}, status=400)
+
             try:
                 self.verify_key.verify(f'{timestamp}{body}'.encode(), bytes.fromhex(signature))
             except BadSignatureError:
@@ -137,8 +148,8 @@ class Client:
             if request.json.get('type') == RequestType.PING.value:
                 return json({"type": 1})
 
-            # if self.app.debug:
-            #     self.log(f"{request.method} {request.path}\n\n{dumps(request.json, indent=2)}")
+            if self.app.debug:
+                self.log(f"{request.method} {request.path}\n\n{dumps(request.json, indent=2)}")
 
             request.ctx = from_dict(
                 data= request.json,
@@ -147,6 +158,7 @@ class Client:
             )
 
             request.ctx.client = self
+            request.ctx.request = request # for convenience, please dont hurt me.
 
         # handle user callbacks
         @self.app.post("/")
@@ -164,28 +176,25 @@ class Client:
     
     async def _sync_commands(self):
         if self.sync_commands:
-            type_classes = {
-                CommandType.CHAT_INPUT.value: SlashCommand,
-                CommandType.MESSAGE.value: ContextMenu,
-                CommandType.USER.value: ContextMenu
-            }
+            await self.http.bulk_overwrite_global_application_commands([x.to_dict() for x in self.commands])
 
-            current_commands = [
-                from_dict(data=cmd, data_class=type_classes.get(cmd.get('type')), config=cast_config)
-                for cmd in await self.http.get_global_application_commands()
-            ]
+            # current_commands = await self.http.get_global_application_commands()
+            # for command in current_commands:
+            #     for key in ('id', 'application_id', 'version'):
+            #         command.pop(key, None)
 
-            current_commands = [x.to_dict() for x in current_commands]
-            gathered_commands = [x.to_dict() for x in self.commands]
+            # gathered_commands = [x.to_dict() for x in self.commands]
 
-            for cmd in gathered_commands:
-                if cmd not in current_commands:
+            # for cmd in gathered_commands:
+            #     if cmd not in current_commands:
+
+            #         print(f"adding command: {cmd}")
                     
-                    self.log(f"syncing {len(self.commands)} commands")
-                    await self.http.bulk_overwrite_global_application_commands(gathered_commands)
-                    self.log(f"synced {len(self.commands)} commands")
+            #         self.log(f"syncing {len(self.commands)} commands")
+            #         await self.http.bulk_overwrite_global_application_commands(gathered_commands)
+            #         self.log(f"synced {len(self.commands)} commands")
 
-                    return
+            #         return
                 
 
     def _handle_deferred_routine(self, routine: asyncio.Task, request, after: Optional[Callable]):
@@ -290,19 +299,22 @@ class Client:
         if request.ctx.type is RequestType.APPLICATION_COMMAND:
             self.dispatch('command', request.ctx)
 
-            if cmd := self.get_command(request.ctx.data.name):
+            cmd, resolved_options = self.get_command(request.ctx.data.name, request.ctx.data.options)
+
+            if cmd:
                 kwargs = {}
 
-                for option in request.ctx.data.options:
+                for option in resolved_options:
 
                     converted = option.value
                     if option.type in (OptionType.CHANNEL, OptionType.USER, OptionType.ROLE, OptionType.MENTIONABLE):
                         converted = request.ctx.data.resolved.get(option.type, option.value)
                     else:
-                        converted = type(option.value)
+                        _type = cmd.callback.func.__annotations__.get(option.name)
+                        if _type:
+                            converted = _type(option.value)
 
                     kwargs[option.name] = converted
-                        
 
                 func = partial(cmd.callback, request.ctx, **kwargs)
                 if cmd.after_callback:
@@ -457,7 +469,8 @@ class Client:
     def _ingest_callbacks(self, *callbacks: Interactable):
         for func in callbacks:
             if isinstance(func, InteractionCommand):
-                self.add_interaction_command(func)
+                if not func.parent:
+                    self.add_interaction_command(func)
             elif isinstance(func, Listener):
                 self.add_listener(func)
             elif isinstance(func, ComponentCallback):
@@ -469,7 +482,7 @@ class Client:
         """
         Gather all callbacks from loaded modules
         """
-        callbacks = [obj for _, obj in inspect.getmembers(sys.modules["__main__"]) + inspect.getmembers(self) if isinstance(obj, Interactable)]
+        callbacks = [obj for _, obj in inspect.getmembers(sys.modules["__main__"]) + inspect.getmembers(self) if isinstance(obj, (Interactable))]
         self._ingest_callbacks(*callbacks)
         self.log(f"Gathered {len(callbacks)} immediate callbacks")
 
@@ -522,13 +535,14 @@ class Client:
                 name=f"snowfin:: {event}"
             )
 
-    def get_command(self, name: str) -> InteractionCommand:
+    def get_command(self, name: str, options: list[Option]) -> InteractionCommand:
         """
         Get a command by name
         """
         for command in self.commands:
             if command.name == name:
-                return command
+                return command.get_lowest_command(options)
+                            
 
     def package_component_callback(self, custom_id: str, component_type: ComponentType, ctx: Interaction) -> Callable:
          # loop through all all our registered component callbacks
