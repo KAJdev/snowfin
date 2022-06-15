@@ -27,7 +27,7 @@ class User:
     id: int
     username: str
     discriminator: str
-    avatar: str
+    avatar: Optional[str]
     bot: Optional[bool]
     mfa_enabled: Optional[bool]
     banner: Optional[str]

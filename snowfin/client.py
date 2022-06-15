@@ -91,7 +91,7 @@ class Client:
             headers=kwargs.get('headers', None),
         )
 
-        self.user: User = None
+        self.user: Optional[User] = None
 
         self.modules = {}
 
