@@ -10,54 +10,44 @@ from .components import Components, Button, Select, TextInput
 MISSING = object()
 
 __all__ = (
-    'AutocompleteResponse',
-    'MessageResponse',
-    'DeferredResponse',
-    'EditResponse',
-    'ModalResponse',
+    "AutocompleteResponse",
+    "MessageResponse",
+    "DeferredResponse",
+    "EditResponse",
+    "ModalResponse",
 )
 
+
 class _DiscordResponse(ABC):
-    def __init__(
-        self,
-        type: ResponseType,
-        **kwargs
-    ) -> None:
+    def __init__(self, type: ResponseType, **kwargs) -> None:
         self.type = type
         self.data = kwargs
 
     @abstractmethod
     def to_dict(self):
-        return {
-            "type": self.type.value,
-            "data": self.data
-        }
+        return {"type": self.type.value, "data": self.data}
+
 
 class AutocompleteResponse(_DiscordResponse):
-    def __init__(
-        self,
-        *choices,
-        **kwargs
-    ) -> None:
+    def __init__(self, *choices, **kwargs) -> None:
         super().__init__(ResponseType.AUTOCOMPLETE, choices=choices, **kwargs)
 
     def to_dict(self):
         return {
             "type": self.type.value,
-            "data": {
-                "choices": [asdict(x) for x in self.data["choices"]]
-            }
+            "data": {"choices": [asdict(x) for x in self.data["choices"]]},
         }
+
 
 class DeferredResponse(_DiscordResponse):
     def __init__(
         self,
         task: Union[asyncio.Task, Callable] = None,
         ephemeral: bool = False,
-        **kwargs
+        **kwargs,
     ) -> None:
 
-        kwargs['flags'] = 64 * int(ephemeral)
+        kwargs["flags"] = 64 * int(ephemeral)
 
         self.task = task
 
@@ -66,9 +56,10 @@ class DeferredResponse(_DiscordResponse):
     def to_dict(self):
         return super().to_dict()
 
+
 class MessageResponse(_DiscordResponse):
     def __init__(
-        self, 
+        self,
         content: str = MISSING,
         embed: Embed = MISSING,
         embeds: list[Embed] = MISSING,
@@ -92,7 +83,9 @@ class MessageResponse(_DiscordResponse):
             elif isinstance(components, (Button, Select)):
                 self.add_component(components)
             else:
-                raise TypeError(f"components must be Components or a list of Button and Select, not {components.__class__}")
+                raise TypeError(
+                    f"components must be Components or a list of Button and Select, not {components.__class__}"
+                )
 
     def add_component(self, component: Union[Button, Select], row: int = None):
         if isinstance(component, TextInput):
@@ -130,36 +123,35 @@ class MessageResponse(_DiscordResponse):
         data = {}
 
         if self.embeds is not MISSING:
-            data['embeds'] = [e.to_dict() for e in self.embeds]
+            data["embeds"] = [e.to_dict() for e in self.embeds]
 
         if self.embed is not MISSING:
-            if 'embeds' not in data:
-                data['embeds'] = []
-            data['embeds'].append(self.embed.to_dict())
+            if "embeds" not in data:
+                data["embeds"] = []
+            data["embeds"].append(self.embed.to_dict())
 
         if self.components is not MISSING:
-            data['components'] = self.components.to_dict()
+            data["components"] = self.components.to_dict()
 
         if self.content is not MISSING:
-            data['content'] = self.content
+            data["content"] = self.content
 
         if self.ephemeral:
-            data['flags'] = 64
+            data["flags"] = 64
 
-        return {
-            "type": self.type.value,
-            "data": data
-        }
+        return {"type": self.type.value, "data": data}
+
 
 class EditResponse(MessageResponse):
     def __init__(self, *args, **kwargs) -> None:
-        kwargs['type'] = ResponseType.EDIT_ORIGINAL_MESSAGE
-        if 'ephemeral' in kwargs:
-            del kwargs['ephemeral']
+        kwargs["type"] = ResponseType.EDIT_ORIGINAL_MESSAGE
+        if "ephemeral" in kwargs:
+            del kwargs["ephemeral"]
         super().__init__(**kwargs)
 
     def to_dict(self):
         return super().to_dict()
+
 
 class ModalResponse(_DiscordResponse):
     def __init__(
@@ -171,7 +163,7 @@ class ModalResponse(_DiscordResponse):
         self.custom_id = custom_id
         self.title = title
         self.components = MISSING
-        
+
         if components is not MISSING:
             if isinstance(components, list):
                 for c in components:
@@ -181,7 +173,9 @@ class ModalResponse(_DiscordResponse):
             elif isinstance(components, TextInput):
                 self.add_component(components)
             else:
-                raise TypeError(f"components must be Components or a list of TextInput, not {components.__class__}")
+                raise TypeError(
+                    f"components must be Components or a list of TextInput, not {components.__class__}"
+                )
 
     def add_component(self, component: TextInput, row: int = None):
         if not isinstance(component, TextInput):
@@ -206,6 +200,6 @@ class ModalResponse(_DiscordResponse):
             "data": {
                 "custom_id": self.custom_id,
                 "title": self.title,
-                "components": self.components.to_dict()
-            }
+                "components": self.components.to_dict(),
+            },
         }

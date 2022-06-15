@@ -6,11 +6,11 @@ An async discord http interactions framework built on top of Sanic
 :license: MIT, see LICENSE for more details.
 """
 
-__title__ = 'snowfin'
-__author__ = 'kajdev'
-__license__ = 'MIT'
-__copyright__ = 'Copyright 2021-present kaj'
-__version__ = '0.1.1'
+__title__ = "snowfin"
+__author__ = "kajdev"
+__license__ = "MIT"
+__copyright__ = "Copyright 2021-present kaj"
+__version__ = "0.1.1"
 
 from .decorators import *
 from .response import *

@@ -3,23 +3,24 @@ import inspect
 from pydoc import cli
 from typing import Optional
 
-from snowfin.decorators import Interactable, InteractionCommand, ComponentCallback, ModalCallback, Listener
-
-__all__ = (
-    'Module',
+from snowfin.decorators import (
+    Interactable,
+    InteractionCommand,
+    ComponentCallback,
+    ModalCallback,
+    Listener,
 )
+
+__all__ = ("Module",)
+
 
 class Module:
 
-    auto_defer = None,
-    description: Optional[str] = None,
+    auto_defer = (None,)
+    description: Optional[str] = (None,)
     enabled: bool = True
 
-    def __new__(
-        cls,
-        client,
-        *args, **kwargs
-    ):
+    def __new__(cls, client, *args, **kwargs):
         new_cls = super().__new__(cls)
 
         new_cls.app = client.app
@@ -42,17 +43,19 @@ class Module:
 
                 new_cls.callbacks.append(val)
 
-            if getattr(val, 'after_callback', None):
+            if getattr(val, "after_callback", None):
                 if not isinstance(val.after_callback, functools.partial):
                     val_name = val.__name__
                     val.after_callback = functools.partial(val.after_callback, new_cls)
                     val.after_callback.__name__ = val_name
 
-            if getattr(val, 'autocomplete_callbacks', None):
-                for key,ac_callback in val.autocomplete_callbacks.items():
+            if getattr(val, "autocomplete_callbacks", None):
+                for key, ac_callback in val.autocomplete_callbacks.items():
                     if not isinstance(ac_callback, functools.partial):
                         val_name = val.__name__
-                        val.autocomplete_callbacks[key] = functools.partial(ac_callback, new_cls)
+                        val.autocomplete_callbacks[key] = functools.partial(
+                            ac_callback, new_cls
+                        )
                         ac_callback.__name__ = val_name
 
             if isinstance(val, InteractionCommand):
@@ -74,8 +77,3 @@ class Module:
 
     def on_load(self):
         pass
-
-
-        
-
-    
