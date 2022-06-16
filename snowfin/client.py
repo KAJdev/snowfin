@@ -673,8 +673,3 @@ class Client:
         data = await self.http.fetch_user(user_id)
         if data is not None:
             return from_dict(User, data, config=cast_config)
-
-    def command(self, command: SlashCommand) -> SlashCommand:
-        """Adds a command to the bot"""
-        self.commands.append(command)
-        return command
