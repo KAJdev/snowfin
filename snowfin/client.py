@@ -114,6 +114,9 @@ class Client:
         # gather callbacks
         self._gather_callbacks()
 
+        # set logging level
+        logger.setLevel(logging_level)
+
         # create some middleware for start and stop events
         @self.app.listener("after_server_start")
         async def on_start(app, loop):

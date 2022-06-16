@@ -155,6 +155,7 @@ class SlashOption:
     required: bool = False
     autocomplete: bool = False
     name_localizations: Optional[Localization] = None
+    description_localizations: Optional[Localization] = None
 
     def to_dict(self):
         d = {
