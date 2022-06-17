@@ -1,87 +1,168 @@
+from __future__ import annotations
+
+import typing
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Union
 
 from .color import Color
 
 __all__ = ("Embed", "EmbedAuthor", "EmbedField", "EmbedFooter")
 
-Empty = object()
-
 
 @dataclass
 class EmbedField:
+    """Represents an embed field.
+
+    Parameters
+    ----------
+    name : str
+        name of the field
+    value : str
+        value of the field
+    inline : bool
+        whether or not this field should display inline
+    """
+
     name: str
     value: str
     inline: bool = False
 
-    def to_dict(self):
-        return {
-            "name": self.name,
-            "value": self.value,
-            "inline": self.inline,
-        }
+    def to_dict(self) -> dict[str, typing.Union[str, bool]]:
+        """Turns the EmbedField into a dictionary
+
+        Returns
+        -------
+        dict[str, typing.Union[str, bool]]
+            the dictionary made from the attributes
+        """
+        return self.__dict__
 
 
 @dataclass
 class EmbedAuthor:
+    """Represents an embed author.
+
+    Parameters
+    ----------
+    name : str
+        name of author
+    url : typing.Optional[str]
+        url of author
+    icon_url : typing.Optional[str]
+        url of author icon (only supports http(s) and attachments)
+    """
+
     name: str
-    url: str = Empty
-    icon_url: str = Empty
+    url: typing.Optional[str] = None
+    icon_url: typing.Optional[str] = None
 
-    def to_dict(self):
-        d = {
-            "name": self.name,
-        }
-        if self.icon_url is not Empty:
-            d["icon_url"] = self.icon_url
-        if self.url is not Empty:
-            d["url"] = self.url
+    def to_dict(self) -> dict[str, str]:
+        """Turns the EmbedField into a dictionary
 
-        return d
+        Returns
+        -------
+        dict[str, str]
+            the dictionary made from the attributes
+        """
+        return {key: value for key, value in self.__dict__.items() if value}
 
 
 @dataclass
 class EmbedFooter:
+    """Represents an embed footer.
+
+    Parameters
+    ----------
+    text : str
+        footer text
+    icon_url : typing.Optional[str]
+        url of footer icon (only supports http(s) and attachments)
+    """
+
     text: str
-    icon_url: str = Empty
+    icon_url: typing.Optional[str] = None
 
-    def to_dict(self):
-        d = {
-            "text": self.text,
-        }
-        if self.icon_url is not Empty:
-            d["icon_url"] = self.icon_url
+    def to_dict(self) -> dict[str, str]:
+        """Turns the EmbedField into a dictionary
 
-        return d
+        Returns
+        -------
+        dict[str, str]
+            the dictionary made from the attributes
+        """
+        return {key: value for key, value in self.__dict__.items() if value}
 
 
 @dataclass
 class Embed:
-    title: str = Empty
-    description: str = Empty
-    url: str = Empty
-    color: Union[int, Color] = Empty
-    timestamp: Union[int, datetime] = Empty
-    footer: EmbedFooter = Empty
-    image: str = Empty
-    thumbnail: str = Empty
-    author: EmbedAuthor = Empty
-    fields: List[EmbedField] = Empty
+    """Represents an embed
 
-    def add_field(self, name: str, value: str, inline: bool = False):
-        if self.fields is Empty:
+    Parameters
+    ----------
+    title : typing.Optional[str]
+        title of embed
+    description : typing.Optional[str]
+        description of embed
+    url : typing.Optional[str]
+        url of embed
+    timestamp : typing.Optional[typing.Union[int, datetime]]
+        timestamp of embed content
+    color : typing.Optional[typing.Union[int, Color]]
+        color code of the embed
+    footer : typing.Optional[EmbedFooter]
+        footer information
+    image : typing.Optional[str]
+        image url
+    thumbnail : typing.Optional[str]
+        thumbnail url
+    author : typing.Optional[EmbedAuthor]
+        author information
+    fields : typing.Optional[list[EmbedField]]
+        fields information
+    """
+
+    title: typing.Optional[str] = None
+    description: typing.Optional[str] = None
+    url: typing.Optional[str] = None
+    timestamp: typing.Optional[typing.Union[int, datetime]] = None
+    color: typing.Optional[typing.Union[int, Color]] = None
+    footer: typing.Optional[EmbedFooter] = None
+    image: typing.Optional[str] = None
+    thumbnail: typing.Optional[str] = None
+    author: typing.Optional[EmbedAuthor] = None
+    fields: typing.Optional[list[EmbedField]] = None
+
+    def add_field(self, name: str, value: str, inline: bool = False) -> Embed:
+        """Adds a field to the embed.
+
+        Parameters
+        ----------
+        name : str
+            name of the field
+        value : str
+            value of the field
+        inline : bool
+            whether or not this field should display inline
+        """
+        if not self.fields:
             self.fields = []
 
         self.fields.append(EmbedField(name, value, inline))
 
         return self
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, typing.Union[str, int, dict[str, typing.Any]]]:
+        """Turns the Embed into a dictionary
+
+        Returns
+        -------
+        dict[str, typing.Union[str, int, dict[str, typing.Any]]]
+            the dictionary made from the attributes
+        """
         d = {}
 
         for k, v in self.__dict__.items():
-            if v is not Empty:
+            if v:
                 if k == "timestamp":
                     if isinstance(v, datetime):
                         v = int(v.timestamp())
