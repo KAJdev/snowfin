@@ -1,15 +1,15 @@
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime
-from dacite import from_dict, config
 from typing import Any, Dict, List, Optional, Union
 
+from dacite import from_dict, config
 from sanic import HTTPResponse
 
 from snowfin.components import Components
 from snowfin.locales import Localization
 from snowfin.response import _DiscordResponse
-
+from .embed import Embed
 from .enums import (
     ChannelType,
     OptionType,
@@ -19,7 +19,6 @@ from .enums import (
     RequestType,
     ResponseType,
 )
-from .embed import Embed
 
 
 @dataclass

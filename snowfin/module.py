@@ -1,6 +1,5 @@
 import functools
 import inspect
-from pydoc import cli
 from typing import Optional
 
 from snowfin.decorators import (
