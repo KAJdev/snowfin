@@ -17,11 +17,11 @@ from sanic import Sanic, Request
 from sanic.log import logger
 from sanic.response import json, HTTPResponse
 
-from snowfin.components import TextInput, is_component, Components
-from snowfin.errors import CogLoadError, HTTPException
-from snowfin.models import *
-from snowfin.module import Module
-from . import Embed
+from .components import TextInput, is_component, Components
+from .errors import CogLoadError, HTTPException
+from .models import *
+from .module import Module
+from .embed import Embed
 from .decorators import *
 from .decorators import Interactable, InteractionCommand
 from .enums import *

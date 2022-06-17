@@ -6,9 +6,9 @@ from typing import Any, Dict, List, Optional, Union
 from dacite import from_dict, config
 from sanic import HTTPResponse
 
-from snowfin.components import Components
-from snowfin.locales import Localization
-from snowfin.response import _DiscordResponse
+from .components import Components
+from .locales import Localization
+from .response import _DiscordResponse
 from .embed import Embed
 from .enums import (
     ChannelType,
