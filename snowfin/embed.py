@@ -9,6 +9,7 @@ from .color import Color
 __all__ = ("Embed", "EmbedAuthor", "EmbedField", "EmbedFooter")
 
 
+
 @dataclass
 class EmbedField:
     """Represents an embed field.
@@ -36,6 +37,7 @@ class EmbedField:
             the dictionary made from the attributes
         """
         return self.__dict__
+
 
 
 @dataclass
@@ -67,6 +69,7 @@ class EmbedAuthor:
         return {key: value for key, value in self.__dict__.items() if value}
 
 
+
 @dataclass
 class EmbedFooter:
     """Represents an embed footer.
@@ -91,6 +94,7 @@ class EmbedFooter:
             the dictionary made from the attributes
         """
         return {key: value for key, value in self.__dict__.items() if value}
+
 
 
 @dataclass
