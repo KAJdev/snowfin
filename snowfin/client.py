@@ -225,7 +225,7 @@ class Client:
                 if after:
                     await self._handle_followup_response(request, after)
             except Exception as e:
-                logger.error(e.__repr__())
+                logger.exception(e)
 
         asyncio.create_task(wrapper())
 
