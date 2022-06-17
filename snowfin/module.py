@@ -2,7 +2,7 @@ import functools
 import inspect
 from typing import Optional
 
-from snowfin.decorators import (
+from .decorators import (
     Interactable,
     InteractionCommand,
     ComponentCallback,

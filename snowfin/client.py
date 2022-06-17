@@ -1,23 +1,27 @@
+import asyncio
 import functools
 import importlib
 import inspect
 import sys
 from contextlib import suppress
+from dataclasses import dataclass
 from functools import partial
 from json import dumps
-from typing import Callable
+from typing import Callable, Optional, Any
 
 import sanic
+from dacite import config, from_dict
 from nacl.exceptions import BadSignatureError
 from nacl.signing import VerifyKey
 from sanic import Sanic, Request
 from sanic.log import logger
-from sanic.response import json
+from sanic.response import json, HTTPResponse
 
-from snowfin.components import TextInput, is_component
-from snowfin.errors import CogLoadError, HTTPException
-from snowfin.models import *
-from snowfin.module import Module
+from .components import TextInput, is_component, Components
+from .errors import CogLoadError, HTTPException
+from .models import *
+from .module import Module
+from .embed import Embed
 from .decorators import *
 from .decorators import Interactable, InteractionCommand
 from .enums import *

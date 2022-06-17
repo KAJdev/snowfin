@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 
 
+__all__ = ("Localization",)
+
+
 @dataclass(frozen=True)
 class Localization:
     da: str

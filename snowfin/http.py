@@ -1,14 +1,14 @@
 import asyncio
 import json
 from dataclasses import asdict
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import aiohttp
 import sanic
 
-from snowfin.decorators import SlashOption
-from snowfin.enums import CommandType
-from snowfin.response import _DiscordResponse
+from .decorators import SlashOption
+from .enums import CommandType
+from .response import _DiscordResponse
 from .errors import *
 
 __all__ = ("HTTP", "Route")

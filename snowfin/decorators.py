@@ -2,14 +2,14 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Callable, Optional, Union
 
-from snowfin.enums import (
+from .enums import (
     ChannelType,
     CommandType,
     ComponentType,
     OptionType,
     Permissions,
 )
-from snowfin.locales import Localization
+from .locales import Localization
 from .models import Choice, Option
 
 __all__ = (
