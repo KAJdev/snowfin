@@ -1,11 +1,11 @@
+import asyncio
+from abc import ABC, abstractmethod
 from dataclasses import asdict
 from typing import Callable, Union
-from abc import ABC, abstractmethod
-import asyncio
 
+from .components import Components, Button, Select, TextInput
 from .embed import Embed
 from .enums import ResponseType
-from .components import Components, Button, Select, TextInput
 
 MISSING = object()
 

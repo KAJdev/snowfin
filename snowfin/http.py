@@ -1,15 +1,14 @@
 import asyncio
-from email.mime import application
-from typing import Any, Optional
-import aiohttp
 import json
-import sanic
 from dataclasses import asdict
+from typing import Any, Optional
+
+import aiohttp
+import sanic
+
 from snowfin.decorators import SlashOption
-
-from snowfin.response import _DiscordResponse
 from snowfin.enums import CommandType
-
+from snowfin.response import _DiscordResponse
 from .errors import *
 
 __all__ = ("HTTP", "Route")

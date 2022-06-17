@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Union
+
 from .color import Color
 
 __all__ = ("Embed", "EmbedAuthor", "EmbedField", "EmbedFooter")
