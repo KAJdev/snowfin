@@ -1,7 +1,8 @@
 from __future__ import annotations
+
+import typing
 from dataclasses import dataclass
 from datetime import datetime
-import typing
 
 from .color import Color
 
