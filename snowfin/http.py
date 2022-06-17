@@ -1,7 +1,7 @@
 import asyncio
 import json
 from dataclasses import asdict
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import aiohttp
 import sanic

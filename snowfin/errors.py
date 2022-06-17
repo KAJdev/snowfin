@@ -1,5 +1,14 @@
 from typing import Union
 
+__all__ = (
+    "DiscordError",
+    "CogLoadError",
+    "HTTPException",
+    "Forbidden",
+    "NotFound",
+    "DiscordInternalError",
+)
+
 
 class DiscordError(Exception):
     """Base class for all discord errors."""
