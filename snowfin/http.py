@@ -1,21 +1,18 @@
 import asyncio
-from email.mime import application
-from typing import Any, Optional
-import aiohttp
 import json
-import sanic
 from dataclasses import asdict
-from snowfin.decorators import SlashOption
+from typing import Any, Optional, Union
 
-from snowfin.response import _DiscordResponse
-from snowfin.enums import CommandType
+import aiohttp
+import sanic
 
+from .decorators import SlashOption
+from .enums import CommandType
+from .response import _DiscordResponse
 from .errors import *
 
-__all__ = (
-    'HTTP',
-    'Route'
-)
+__all__ = ("HTTP", "Route")
+
 
 class Route:
     BASE: str = "https://discord.com/api/v10"
@@ -29,8 +26,9 @@ class Route:
 
     def format(self, **extra_params) -> None:
         self.params.update(extra_params)
-        for param,value in self.params.items():
-            self.url = self.url.replace('{'+param+'}', str(value))
+        for param, value in self.params.items():
+            self.url = self.url.replace("{" + param + "}", str(value))
+
 
 class BucketLock:
     """
@@ -88,10 +86,12 @@ class BucketLock:
             self.unlock()
         self.unlock_on_exit = True
 
+
 class HTTP:
     """
     HTTP class
     """
+
     def __init__(
         self,
         application_id: int,
@@ -122,12 +122,7 @@ class HTTP:
 
         return self.locks[bucket_hash]
 
-    async def request(
-        self,
-        route: Route,
-        data: Optional[dict] = None,
-        **kwargs
-    ) -> Any:
+    async def request(self, route: Route, data: Optional[dict] = None, **kwargs) -> Any:
         """
         Make a followup request
         """
@@ -137,8 +132,8 @@ class HTTP:
 
         headers = self.headers.copy()
 
-        if 'headers' in kwargs:
-            headers.update(kwargs.pop('headers'))
+        if "headers" in kwargs:
+            headers.update(kwargs.pop("headers"))
 
         if route.auth:
             if self.token is None:
@@ -146,7 +141,7 @@ class HTTP:
                     "You must provide a token to make an authenticated request"
                 )
 
-            headers['Authorization'] = f"Bot {self.token}"
+            headers["Authorization"] = f"Bot {self.token}"
 
         route.format(application_id=self.application_id)
 
@@ -157,13 +152,13 @@ class HTTP:
                 headers=headers,
                 proxy=self.proxy,
                 proxy_auth=self.proxy_auth,
-                json=data if data is not None else None
+                json=data if data is not None else None,
             ) as response:
 
                 response_data = None
-                text = await response.text(encoding='utf-8')
+                text = await response.text(encoding="utf-8")
                 try:
-                    if response.headers['content-type'] == 'application/json':
+                    if response.headers["content-type"] == "application/json":
                         response_data = json.loads(text)
                 except KeyError:
                     pass
@@ -188,90 +183,70 @@ class HTTP:
         Close the HTTP session
         """
         await self._session.close()
-    
+
     def send_followup(
-        self,
-        request: sanic.Request,
-        response: _DiscordResponse,
-        **kwargs
+        self, request: sanic.Request, response: _DiscordResponse, **kwargs
     ) -> Any:
         """
         Send a message
         """
-        r = Route('POST', '/webhooks/{application_id}/{interaction_token}',
-            interaction_token = request.ctx.token
+        r = Route(
+            "POST",
+            "/webhooks/{application_id}/{interaction_token}",
+            interaction_token=request.ctx.token,
         )
 
-        return self.request(r,
-            data=response.to_dict().get('data', {}),
-            **kwargs
-        )
+        return self.request(r, data=response.to_dict().get("data", {}), **kwargs)
 
     def edit_original_message(
-        self,
-        request: sanic.Request,
-        response: _DiscordResponse,
-        **kwargs
+        self, request: sanic.Request, response: _DiscordResponse, **kwargs
     ) -> Any:
         """
         Edit the original message
         """
-        r = Route('PATCH', '/webhooks/{application_id}/{interaction_token}/messages/@original',
-            interaction_token = request.ctx.token
+        r = Route(
+            "PATCH",
+            "/webhooks/{application_id}/{interaction_token}/messages/@original",
+            interaction_token=request.ctx.token,
         )
 
-        data = response.to_dict().get('data', {})
+        data = response.to_dict().get("data", {})
         print(data)
 
-        return self.request(r,
-            data=data,
-            **kwargs
-        )
+        return self.request(r, data=data, **kwargs)
 
-    def delete_original_message(
-        self,
-        request: sanic.Request,
-        **kwargs
-    ) -> Any:
+    def delete_original_message(self, request: sanic.Request, **kwargs) -> Any:
         """
         Delete the original message
         """
-        r = Route('DELETE', '/webhooks/{application_id}/{interaction_token}/messages/@original',
-            interaction_token = request.ctx.token
+        r = Route(
+            "DELETE",
+            "/webhooks/{application_id}/{interaction_token}/messages/@original",
+            interaction_token=request.ctx.token,
         )
 
         return self.request(r, **kwargs)
 
     def edit_followup_message(
-        self,
-        request: sanic.Request,
-        response: _DiscordResponse,
-        message: int,
-        **kwargs
+        self, request: sanic.Request, response: _DiscordResponse, message: int, **kwargs
     ) -> Any:
         """
         Edit the followup message
         """
-        r = Route('PATCH', '/webhooks/{application_id}/{interaction_token}/messages/{message_id}',
-            interaction_token = request.ctx.token,
-            message_id = message
+        r = Route(
+            "PATCH",
+            "/webhooks/{application_id}/{interaction_token}/messages/{message_id}",
+            interaction_token=request.ctx.token,
+            message_id=message,
         )
 
-        return self.request(r,
-            data=response.to_dict().get('data', {}),
-            **kwargs
-        )
+        return self.request(r, data=response.to_dict().get("data", {}), **kwargs)
 
-    def get_global_application_commands(
-        self,
-        **kwargs
-    ) -> Any:
+    def get_global_application_commands(self, **kwargs) -> Any:
         """
         Get global application commands
         """
-        r = Route('GET', '/applications/{application_id}/commands',
-            auth=True
-        )
+        r = Route("GET", "/applications/{application_id}/commands", auth=True)
 
         return self.request(r, **kwargs)
 
@@ -284,39 +259,38 @@ class HTTP:
         description_localizations: Optional[dict] = None,
         options: Optional[list[Union[dict, SlashOption]]] = None,
         default_permission: bool = True,
-        **kwargs
+        **kwargs,
     ) -> Any:
         """
         Create global application command
         """
-        r = Route('POST', '/applications/{application_id}/commands',
-            auth=True
-        )
+        r = Route("POST", "/applications/{application_id}/commands", auth=True)
 
-        return self.request(r, 
+        return self.request(
+            r,
             data={
                 "name": name,
                 "description": description,
                 "type": type.value,
                 "name_localizations": name_localizations,
                 "description_localizations": description_localizations,
-                "options": [asdict(o) if isinstance(o, SlashOption) else o for o in options],
-                "default_permission": default_permission
+                "options": [
+                    asdict(o) if isinstance(o, SlashOption) else o for o in options
+                ],
+                "default_permission": default_permission,
             }
-            **kwargs
+            ** kwargs,
         )
 
-    def get_global_application_command(
-        self,
-        command_id: int,
-        **kwargs
-    ) -> Any:
+    def get_global_application_command(self, command_id: int, **kwargs) -> Any:
         """
         Get global application command
         """
-        r = Route('GET', '/applications/{application_id}/commands/{command_id}',
-            command_id = command_id,
-            auth=True
+        r = Route(
+            "GET",
+            "/applications/{application_id}/commands/{command_id}",
+            command_id=command_id,
+            auth=True,
         )
 
         return self.request(r, **kwargs)
@@ -330,85 +304,69 @@ class HTTP:
         description_localizations: Optional[dict] = None,
         options: Optional[list[Union[dict, SlashOption]]] = None,
         default_permission: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ) -> Any:
         """
         Edit global application command
         """
-        r = Route('PATCH', '/applications/{application_id}/commands/{command_id}',
-            command_id = command_id,
-            auth=True
+        r = Route(
+            "PATCH",
+            "/applications/{application_id}/commands/{command_id}",
+            command_id=command_id,
+            auth=True,
         )
 
         data = {}
 
         if name is not None:
-            data['name'] = name
+            data["name"] = name
 
         if description is not None:
-            data['description'] = description
+            data["description"] = description
 
         if name_localizations is not None:
-            data['name_localizations'] = name_localizations
+            data["name_localizations"] = name_localizations
 
         if description_localizations is not None:
-            data['description_localizations'] = description_localizations
+            data["description_localizations"] = description_localizations
 
         if options is not None:
-            data['options'] = [asdict(o) if isinstance(o, SlashOption) else o for o in options]
+            data["options"] = [
+                asdict(o) if isinstance(o, SlashOption) else o for o in options
+            ]
 
         if default_permission is not None:
-            data['default_permission'] = default_permission
+            data["default_permission"] = default_permission
 
-        return self.request(r, 
-            data=data
-            **kwargs
-        )
+        return self.request(r, data=data**kwargs)
 
-    def delete_global_application_command(
-        self,
-        command_id: int,
-        **kwargs
-    ) -> Any:
+    def delete_global_application_command(self, command_id: int, **kwargs) -> Any:
         """
         Delete global application command
         """
-        r = Route('DELETE', '/applications/{application_id}/commands/{command_id}',
-            command_id = command_id,
-            auth=True
+        r = Route(
+            "DELETE",
+            "/applications/{application_id}/commands/{command_id}",
+            command_id=command_id,
+            auth=True,
         )
 
         return self.request(r, **kwargs)
 
     def bulk_overwrite_global_application_commands(
-        self,
-        commands: list[dict],
-        **kwargs
+        self, commands: list[dict], **kwargs
     ) -> Any:
         """
         Bulk overwrite global application commands
         """
-        r = Route('PUT', '/applications/{application_id}/commands',
-            auth=True
-        )
+        r = Route("PUT", "/applications/{application_id}/commands", auth=True)
 
-        return self.request(r, 
-            data=commands,
-            **kwargs
-        )
+        return self.request(r, data=commands, **kwargs)
 
-    def fetch_user(
-        self,
-        user_id: int,
-        **kwargs
-    ) -> Any:
+    def fetch_user(self, user_id: int, **kwargs) -> Any:
         """
         Fetch current user
         """
-        r = Route('GET', '/users/{user_id}',
-            user_id = user_id,
-            auth=True
-        )
+        r = Route("GET", "/users/{user_id}", user_id=user_id, auth=True)
 
         return self.request(r, **kwargs)
-    

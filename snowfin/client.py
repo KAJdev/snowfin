@@ -1,41 +1,45 @@
 import asyncio
-from contextlib import suppress
-from dataclasses import dataclass
 import functools
 import importlib
 import inspect
 import sys
-from typing import Callable, Optional
+from contextlib import suppress
+from dataclasses import dataclass
 from functools import partial
-
-from sanic import Sanic, Request
-import sanic
-from sanic.response import HTTPResponse, json
-from sanic.log import logger
-
-from nacl.signing import VerifyKey
-from nacl.exceptions import BadSignatureError
-
-from dacite import from_dict, config
-from snowfin.components import Components, TextInput, is_component
-from snowfin.errors import CogLoadError, HTTPException
-
-from snowfin.models import *
-from snowfin.module import Module
-from .decorators import Interactable, InteractionCommand
-from .response import _DiscordResponse, AutocompleteResponse, DeferredResponse, MessageResponse, ModalResponse
-from .http import *
-from .decorators import *
-from .enums import *
-
 from json import dumps
+from typing import Callable, Optional, Any
 
-__all__ = (
-    'Client',
-    'AutoDefer',
+import sanic
+from dacite import config, from_dict
+from nacl.exceptions import BadSignatureError
+from nacl.signing import VerifyKey
+from sanic import Sanic, Request
+from sanic.log import logger
+from sanic.response import json, HTTPResponse
+
+from .components import TextInput, is_component, Components
+from .errors import CogLoadError, HTTPException
+from .models import *
+from .module import Module
+from .embed import Embed
+from .decorators import *
+from .decorators import Interactable, InteractionCommand
+from .enums import *
+from .http import *
+from .response import (
+    _DiscordResponse,
+    AutocompleteResponse,
+    DeferredResponse,
+    MessageResponse,
+    ModalResponse,
 )
 
-cast_config=config.Config(
+__all__ = (
+    "Client",
+    "AutoDefer",
+)
+
+cast_config = config.Config(
     cast=[
         int,
         ChannelType,
@@ -47,14 +51,15 @@ cast_config=config.Config(
     ]
 )
 
+
 @dataclass
 class AutoDefer:
     enabled: bool = False
     timeout: int = 1
     ephemeral: bool = False
 
-class Client:
 
+class Client:
     def __init__(
         self,
         verify_key: str,
@@ -64,7 +69,7 @@ class Client:
         auto_defer: AutoDefer | bool = AutoDefer(),
         app: Sanic = None,
         logging_level: int = 1,
-        **kwargs
+        **kwargs,
     ):
         # create a new app if none is not supplied
         if app is None:
@@ -81,15 +86,15 @@ class Client:
 
         self.sync_commands = sync_commands
 
-        self.log = lambda *msgs: logger.info(' '.join(str(msg) for msg in msgs))
-        self.error = lambda *msgs: logger.error(' '.join(str(msg) for msg in msgs))
+        self.log = lambda *msgs: logger.info(" ".join(str(msg) for msg in msgs))
+        self.error = lambda *msgs: logger.error(" ".join(str(msg) for msg in msgs))
 
         self.http: HTTP = HTTP(
             application_id=application_id,
             token=token,
-            proxy=kwargs.get('proxy', None),
-            proxy_auth=kwargs.get('proxy_auth', None),
-            headers=kwargs.get('headers', None),
+            proxy=kwargs.get("proxy", None),
+            proxy_auth=kwargs.get("proxy_auth", None),
+            headers=kwargs.get("headers", None),
         )
 
         self.user: Optional[User] = None
@@ -107,15 +112,18 @@ class Client:
         # gather callbacks
         self._gather_callbacks()
 
+        # set logging level
+        logger.setLevel(logging_level)
+
         # create some middleware for start and stop events
-        @self.app.listener('after_server_start')
+        @self.app.listener("after_server_start")
         async def on_start(app, loop):
             try:
                 await self._sync_commands()
             except HTTPException as e:
                 self.error(f"failed to sync commands: {e}")
 
-            self.dispatch('start')
+            self.dispatch("start")
 
             if self.http.application_id:
                 try:
@@ -123,9 +131,9 @@ class Client:
                 except HTTPException as e:
                     self.error(f"failed to fetch application bot user: {e}")
 
-        @self.app.listener('before_server_stop')
+        @self.app.listener("before_server_stop")
         async def on_stop(app, loop):
-            self.dispatch('stop')
+            self.dispatch("stop")
 
         # create middlware for verifying that discord is the one who sent the interaction
         @self.app.on_request
@@ -138,27 +146,29 @@ class Client:
                 return json({"error": "invalid headers"}, status=400)
 
             try:
-                self.verify_key.verify(f'{timestamp}{body}'.encode(), bytes.fromhex(signature))
+                self.verify_key.verify(
+                    f"{timestamp}{body}".encode(), bytes.fromhex(signature)
+                )
             except BadSignatureError:
                 return json({"error": "invalid signature"}, status=403)
 
         # send PONGs to PINGs and construct the interaction context
         @self.app.on_request
         async def ack_request(request: Request):
-            if request.json.get('type') == RequestType.PING.value:
+            if request.json.get("type") == RequestType.PING.value:
                 return json({"type": 1})
 
             if self.app.debug:
-                self.log(f"{request.method} {request.path}\n\n{dumps(request.json, indent=2)}")
+                self.log(
+                    f"{request.method} {request.path}\n\n{dumps(request.json, indent=2)}"
+                )
 
             request.ctx = from_dict(
-                data= request.json,
-                data_class=Interaction,
-                config=cast_config
+                data=request.json, data_class=Interaction, config=cast_config
             )
 
             request.ctx.client = self
-            request.ctx.request = request # for convenience, please dont hurt me.
+            request.ctx.request = request  # for convenience, please dont hurt me.
 
         # handle user callbacks
         @self.app.post("/")
@@ -173,10 +183,12 @@ class Client:
             return self.app.loop
         except sanic.exceptions.SanicException:
             return None
-    
+
     async def _sync_commands(self):
         if self.sync_commands:
-            await self.http.bulk_overwrite_global_application_commands([x.to_dict() for x in self.commands])
+            await self.http.bulk_overwrite_global_application_commands(
+                [x.to_dict() for x in self.commands]
+            )
 
             # current_commands = await self.http.get_global_application_commands()
             # for command in current_commands:
@@ -189,19 +201,21 @@ class Client:
             #     if cmd not in current_commands:
 
             #         print(f"adding command: {cmd}")
-                    
+
             #         self.log(f"syncing {len(self.commands)} commands")
             #         await self.http.bulk_overwrite_global_application_commands(gathered_commands)
             #         self.log(f"synced {len(self.commands)} commands")
 
             #         return
-                
 
-    def _handle_deferred_routine(self, routine: asyncio.Task, request, after: Optional[Callable]):
+    def _handle_deferred_routine(
+        self, routine: asyncio.Task, request, after: Optional[Callable]
+    ):
         """
         Create a wrapper for the task supplied and wait on it.
         log any errors and pass the result onward
         """
+
         async def wrapper():
             try:
                 response = await routine
@@ -211,7 +225,8 @@ class Client:
                 if after:
                     await self._handle_followup_response(request, after)
             except Exception as e:
-                logger.error(e.__repr__())
+                logger.exception(e)
+
         asyncio.create_task(wrapper())
 
     async def _handle_deferred_response(self, request, response):
@@ -219,7 +234,10 @@ class Client:
         Take the result of a deferred callback task and send a request to the interaction webhook
         """
         if response:
-            if response.type in (ResponseType.SEND_MESSAGE, ResponseType.EDIT_ORIGINAL_MESSAGE):
+            if response.type in (
+                ResponseType.SEND_MESSAGE,
+                ResponseType.EDIT_ORIGINAL_MESSAGE,
+            ):
                 await self.http.edit_original_message(request, response)
             else:
                 raise Exception("Invalid response type")
@@ -247,21 +265,23 @@ class Client:
 
         if not isinstance(resp, tuple):
             resp = [resp]
-            
+
         for arg in resp:
             if isinstance(arg, ResponseType):
-                kwargs['type'] = arg
+                kwargs["type"] = arg
 
             elif isinstance(arg, Embed):
-                kwargs.setdefault('embeds', []).append(arg)
+                kwargs.setdefault("embeds", []).append(arg)
                 chosen_type = chosen_type or MessageResponse
 
             elif is_component(arg):
-                kwargs.setdefault('components', Components()).add_component(arg)
-                chosen_type = chosen_type or (ModalResponse if isinstance(arg, TextInput) else MessageResponse)
+                kwargs.setdefault("components", Components()).add_component(arg)
+                chosen_type = chosen_type or (
+                    ModalResponse if isinstance(arg, TextInput) else MessageResponse
+                )
 
             elif isinstance(arg, Components):
-                kwargs['components'] = arg
+                kwargs["components"] = arg
 
                 for row in arg.rows:
                     for component in row.components:
@@ -272,11 +292,11 @@ class Client:
                     chosen_type = chosen_type or MessageResponse
 
             elif isinstance(arg, str):
-                kwargs['content'] = arg
+                kwargs["content"] = arg
                 chosen_type = chosen_type or MessageResponse
 
             elif isinstance(arg, list):
-                kwargs.setdefault('choices', []).extend(arg)
+                kwargs.setdefault("choices", []).extend(arg)
                 chosen_type = chosen_type or AutocompleteResponse
 
             elif isinstance(arg, dict):
@@ -291,15 +311,17 @@ class Client:
         Grab the callback Coroutine and create a task.
         """
         # handle the before requests
-        self.dispatch('before_request', request.ctx)
+        self.dispatch("before_request", request.ctx)
 
         func: Optional[Callable] = None
         after: Optional[Callable] = None
 
         if request.ctx.type is RequestType.APPLICATION_COMMAND:
-            self.dispatch('command', request.ctx)
+            self.dispatch("command", request.ctx)
 
-            cmd, resolved_options = self.get_command(request.ctx.data.name, request.ctx.data.options)
+            cmd, resolved_options = self.get_command(
+                request.ctx.data.name, request.ctx.data.options
+            )
 
             if cmd:
                 kwargs = {}
@@ -307,8 +329,15 @@ class Client:
                 for option in resolved_options:
 
                     converted = option.value
-                    if option.type in (OptionType.CHANNEL, OptionType.USER, OptionType.ROLE, OptionType.MENTIONABLE):
-                        converted = request.ctx.data.resolved.get(option.type, option.value)
+                    if option.type in (
+                        OptionType.CHANNEL,
+                        OptionType.USER,
+                        OptionType.ROLE,
+                        OptionType.MENTIONABLE,
+                    ):
+                        converted = request.ctx.data.resolved.get(
+                            option.type, option.value
+                        )
                     else:
                         _type = cmd.callback.func.__annotations__.get(option.name)
                         if _type:
@@ -321,7 +350,7 @@ class Client:
                     after = partial(cmd.after_callback, request.ctx, **kwargs)
 
         elif request.ctx.type is RequestType.APPLICATION_COMMAND_AUTOCOMPLETE:
-            self.dispatch('autocomplete', request.ctx)
+            self.dispatch("autocomplete", request.ctx)
 
             if cmd := self.get_command(request.ctx.data.name):
                 for option in request.ctx.data.options:
@@ -332,16 +361,14 @@ class Client:
                         break
 
         elif request.ctx.type is RequestType.MESSAGE_COMPONENT:
-            self.dispatch('component', request.ctx)
+            self.dispatch("component", request.ctx)
 
             func, after = self.package_component_callback(
-                request.ctx.data.custom_id,
-                request.ctx.data.component_type,
-                request.ctx
+                request.ctx.data.custom_id, request.ctx.data.component_type, request.ctx
             )
 
         elif request.ctx.type is RequestType.MODAL_SUBMIT:
-            self.dispatch('modal', request.ctx)
+            self.dispatch("modal", request.ctx)
 
             if modal := self.modals.get(request.ctx.data.custom_id):
                 func = partial(modal, request.ctx)
@@ -349,25 +376,30 @@ class Client:
                 if modal.after_callback:
                     after = partial(modal.after_callback, request.ctx)
 
-        if self.app.debug: self.log(f"getting callback for {request.ctx.type}: found", f"{func.func.__name__}{func.args[1:]}" if func else None)
+        if self.app.debug:
+            self.log(
+                f"getting callback for {request.ctx.type}: found",
+                f"{func.func.__name__}{func.args[1:]}" if func else None,
+            )
 
         if func:
             task = asyncio.create_task(func())
 
             # auto defer if and only if the decorator and/or client told us too and it *can* be defered
-            if self.auto_defer.enabled and \
-                request.ctx.type in (RequestType.APPLICATION_COMMAND, RequestType.MESSAGE_COMPONENT):
+            if self.auto_defer.enabled and request.ctx.type in (
+                RequestType.APPLICATION_COMMAND,
+                RequestType.MESSAGE_COMPONENT,
+            ):
                 # we want to defer automatically and keep the original task going
                 # so we wait for up to the timeout, then construct a DeferredResponse ourselves
                 # then handle_deferred_routine() will do the rest
-                done, pending = await asyncio.wait([task], timeout = self.auto_defer.timeout)
-
+                done, pending = await asyncio.wait(
+                    [task], timeout=self.auto_defer.timeout
+                )
 
                 if task in pending:
                     # task didn't return in time, let it keep going and construct a defer for it
-                    resp = DeferredResponse(task,
-                        ephemeral=self.auto_defer.ephemeral
-                    )
+                    resp = DeferredResponse(task, ephemeral=self.auto_defer.ephemeral)
                 else:
                     # the task returned in time, get the result and use that like normal
                     resp = task.result()
@@ -403,16 +435,19 @@ class Client:
                 # launch after callbacks if there is any and the command is not a deferred one
                 if after:
                     asyncio.create_task(self._handle_followup_response(request, after))
-            
+
             # do some logging and return the 'dictified' data
             data = resp.to_dict()
-            if self.app.debug: self.log(f"RESPONDING {request.ctx.type} `{getattr(request.ctx.data, 'name', None)}`", data)
+            if self.app.debug:
+                self.log(
+                    f"RESPONDING {request.ctx.type} `{getattr(request.ctx.data, 'name', None)}`",
+                    data,
+                )
             return json(data)
 
         elif isinstance(resp, HTTPResponse):
             # someone gave us a sanic response, Assume they know what they are doing
             return resp
-
 
     def run(self, host: str, port: int, **kwargs):
         self.app.run(host=host, port=port, access_log=False, **kwargs)
@@ -428,19 +463,19 @@ class Client:
         except Exception as e:
             raise CogLoadError(f"{module_name} failed to load: {e}")
         self.modules[resolved_name] = []
-        
+
         # go through every class that inherits from Module
         for cls in inspect.getmembers(module, inspect.isclass):
             if issubclass(cls[1], Module) and cls[1].enabled and cls[1] != Module:
                 new_module = cls[1](self)
                 self.modules[resolved_name].append(new_module)
 
-                if hasattr(new_module, 'on_load'):
+                if hasattr(new_module, "on_load"):
                     new_module.on_load()
-                
+
     def unload_module(self, module: str):
         module_name = importlib.util.resolve_name(module, __spec__.parent)
-        
+
         if module_name not in self.modules:
             raise ValueError(f"{module_name} not loaded")
 
@@ -482,7 +517,12 @@ class Client:
         """
         Gather all callbacks from loaded modules
         """
-        callbacks = [obj for _, obj in inspect.getmembers(sys.modules["__main__"]) + inspect.getmembers(self) if isinstance(obj, (Interactable))]
+        callbacks = [
+            obj
+            for _, obj in inspect.getmembers(sys.modules["__main__"])
+            + inspect.getmembers(self)
+            if isinstance(obj, (Interactable))
+        ]
         self._ingest_callbacks(*callbacks)
         self.log(f"Gathered {len(callbacks)} immediate callbacks")
 
@@ -511,7 +551,9 @@ class Client:
         Add a component callback to the client
         """
         if (callback.custom_id, callback.type) in self.components:
-            raise ValueError(f"{callback.type} with custom_id `{callback.custom_id}` already exists")
+            raise ValueError(
+                f"{callback.type} with custom_id `{callback.custom_id}` already exists"
+            )
 
         self.components[(callback.custom_id, callback.type)] = callback
 
@@ -520,7 +562,9 @@ class Client:
         Add a modal callback to the client
         """
         if callback.custom_id in self.modals:
-            raise ValueError(f"modal with custom_id `{callback.custom_id}` already exists")
+            raise ValueError(
+                f"modal with custom_id `{callback.custom_id}` already exists"
+            )
 
         self.modals[callback.custom_id] = callback
 
@@ -530,10 +574,7 @@ class Client:
         """
         self.log(f"Dispatching {event}")
         for listener in self._listeners.get(event, []):
-            asyncio.create_task(
-                listener(*args, **kwargs),
-                name=f"snowfin:: {event}"
-            )
+            asyncio.create_task(listener(*args, **kwargs), name=f"snowfin:: {event}")
 
     def get_command(self, name: str, options: list[Option]) -> InteractionCommand:
         """
@@ -542,10 +583,11 @@ class Client:
         for command in self.commands:
             if command.name == name:
                 return command.get_lowest_command(options)
-                            
 
-    def package_component_callback(self, custom_id: str, component_type: ComponentType, ctx: Interaction) -> Callable:
-         # loop through all all our registered component callbacks
+    def package_component_callback(
+        self, custom_id: str, component_type: ComponentType, ctx: Interaction
+    ) -> Callable:
+        # loop through all all our registered component callbacks
         for (_id, _type), callback in self.components.items():
 
             # check the type first and foremost
@@ -563,7 +605,7 @@ class Client:
                     # check if they match the mappings. Construct a list of the
                     # values to pass to the callback and convert
                     for i in range(len(callback.chopped_id)):
-                        
+
                         # this is the next constant in the custom_id
                         segment = callback.chopped_id[i]
 
@@ -574,17 +616,17 @@ class Client:
                         # strip the constant from the custom_id so we know that
                         # the next part of the string is the value
                         left = left.removeprefix(segment)
-                        if i+1 < len(callback.mappings):
-                            value = left.strip(callback.chopped_id[i+1])[0]
+                        if i + 1 < len(callback.mappings):
+                            value = left.strip(callback.chopped_id[i + 1])[0]
                         else:
                             value = left
-                        
+
                         just_values.append(value)
 
                         # remove the value from the custom_id so we know
                         # that the next part of the string is the next constant
                         left = left.removeprefix(value)
-                            
+
                     # check to make sure that we have the right number of values collected
                     if len(just_values) != len(callback.mappings):
                         continue
@@ -598,16 +640,16 @@ class Client:
                         with suppress(ValueError):
                             kwargs[name] = _type(kwargs[name])
                 elif _id != custom_id:
-                        continue
-
+                    continue
 
                 return (
                     functools.partial(callback.callback, ctx, **kwargs),
-                    functools.partial(callback.after_callback, ctx, **kwargs) if callback.after_callback else None
+                    functools.partial(callback.after_callback, ctx, **kwargs)
+                    if callback.after_callback
+                    else None,
                 )
 
         return None, None
-
 
     def remove_callback(self, callback: Interactable):
         """
@@ -621,8 +663,6 @@ class Client:
             self.components.pop((callback.custom_id, callback.type))
         elif isinstance(callback, ModalCallback):
             self.modals.pop(callback.custom_id)
-
-
 
     async def fetch_user(self, user_id: int) -> User:
         """

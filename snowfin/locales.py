@@ -1,5 +1,7 @@
-
 from dataclasses import dataclass
+
+
+__all__ = ("Localization",)
 
 
 @dataclass(frozen=True)
@@ -45,7 +47,7 @@ class Localization:
             if k.startswith("__") or not v:
                 continue
 
-            d[k.replace('_', '-')] = v
+            d[k.replace("_", "-")] = v
 
         return d
 
