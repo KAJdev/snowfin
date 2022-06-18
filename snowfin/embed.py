@@ -132,6 +132,39 @@ class Embed:
     author: typing.Optional[EmbedAuthor] = None
     fields: typing.Optional[list[EmbedField]] = None
 
+    def set_footer(self, text: str, icon_url: typing.Optional[str] = None) -> Embed:
+        """Sets the embed footer.
+
+        Parameters
+        ----------
+        text : str
+            footer text
+        icon_url : typing.Optional[str]
+            url of footer icon (only supports http(s) and attachments)
+        """
+        self.footer = EmbedFooter(text, icon_url)
+        return self
+
+    def set_author(
+        self,
+        name: str,
+        url: typing.Optional[str] = None,
+        icon_url: typing.Optional[str] = None,
+    ) -> Embed:
+        """Sets the embed author
+
+        Parameters
+        ----------
+        name : str
+            name of author
+        url : typing.Optional[str]
+            url of author
+        icon_url : typing.Optional[str]
+            url of author icon (only supports http(s) and attachments)
+        """
+        self.author = EmbedAuthor(name, url, icon_url)
+        return self
+
     def add_field(self, name: str, value: str, inline: bool = False) -> Embed:
         """Adds a field to the embed.
 
